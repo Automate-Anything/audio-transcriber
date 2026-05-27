@@ -12,12 +12,15 @@
   <style>
     :root {
       --cream: #F5F1EA;
+      --paper: #EFEAE0;
       --ink: #0F0E0D;
       --rust: #C04A2B;
       --smoke: #8A8378;
       --ok: #2D6A4F;
+      --gold: #B8902E;
       --ink-dim: rgba(15, 14, 13, 0.3);
       --ink-faint: rgba(15, 14, 13, 0.1);
+      --ink-fainter: rgba(15, 14, 13, 0.04);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -33,15 +36,16 @@
       position: fixed; inset: 0;
       pointer-events: none; z-index: 1;
       opacity: 0.4; mix-blend-mode: multiply;
-      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.05  0 0 0 0 0.05  0 0 0 0 0.05  0 0 0 0.08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.05  0 0 0 0 0.05  0 0 0 0 0.05  0 0 0 0 0.08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     }
 
     main { position: relative; z-index: 10; padding: 2.5rem 1.5rem; }
     @media (min-width: 768px) { main { padding: 4rem 3rem; } }
     .container { max-width: 64rem; margin: 0 auto; }
 
-    .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--smoke); }
+    .mono    { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--smoke); }
     .mono-sm { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.3em; color: var(--smoke); }
+    .mono-body { font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; color: var(--smoke); text-transform: none; letter-spacing: 0; }
 
     header { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1px solid var(--ink); padding-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap; }
 
@@ -54,6 +58,24 @@
     @media (min-width: 768px) { .hero p { font-size: 1.5rem; } }
 
     .panel { border: 1px solid var(--ink); }
+
+    /* ===== Server badge ===== */
+    .server-badge {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.75rem 1.25rem;
+      border: 1px solid var(--ink-dim);
+      margin-bottom: 1.5rem;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .server-badge .left { display: flex; align-items: center; gap: 0.6rem; min-width: 0; flex: 1; }
+    .server-badge .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+    .server-badge.shared .dot { background: var(--smoke); }
+    .server-badge.own    .dot { background: var(--ok); }
+    .server-badge .label { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--ink); }
+    .server-badge .sub   { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--smoke); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .server-badge .change-link { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--ink); cursor: pointer; background: none; border: none; padding: 0.25rem 0.5rem; text-decoration: underline; text-underline-offset: 3px; }
+    .server-badge .change-link:hover { color: var(--rust); }
 
     /* API key panel */
     .key-panel { padding: 1.25rem 1.5rem; }
@@ -70,7 +92,7 @@
     .key-help { font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.5; color: var(--smoke); margin-top: 0.75rem; text-transform: none; letter-spacing: 0; }
     .err-inline { color: var(--rust); font-family: 'JetBrains Mono', monospace; font-size: 12px; text-transform: none; letter-spacing: 0; }
 
-    /* Dropzone — label wraps a transparent file input overlay. */
+    /* Dropzone */
     .dropzone { position: relative; display: block; border: 1px solid var(--ink); cursor: pointer; transition: background 0.2s, color 0.2s; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
     .dropzone.drag-over { background: var(--ink); color: var(--cream); }
     .dropzone.drag-over .mono-sm { color: var(--cream); }
@@ -91,6 +113,49 @@
     .btn.primary:hover:not(:disabled) { background: var(--rust); border-color: var(--rust); }
     .btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .btn-row { display: flex; gap: 0.75rem; flex-shrink: 0; }
+
+    /* ===== Path picker ===== */
+    .path-picker {
+      padding: 1.5rem;
+      border-bottom: 1px solid var(--ink-dim);
+      background: var(--ink-fainter);
+    }
+    .path-picker-head {
+      font-family: 'Fraunces', serif;
+      font-size: 1.15rem;
+      font-weight: 400;
+      margin-bottom: 1.25rem;
+    }
+    .path-grid { display: grid; gap: 1rem; }
+    @media (min-width: 600px) { .path-grid { grid-template-columns: 1fr 1fr; } }
+    .path-card {
+      border: 1px solid var(--ink-dim);
+      padding: 1.25rem;
+      background: var(--cream);
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      position: relative;
+      display: flex; flex-direction: column;
+    }
+    .path-card:hover { border-color: var(--ink); }
+    .path-card.recommended { border-color: var(--ink); }
+    .path-card.recommended::after {
+      content: 'Recommended';
+      position: absolute;
+      top: -0.55rem; right: 1rem;
+      background: var(--ink); color: var(--cream);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px; text-transform: uppercase; letter-spacing: 0.2em;
+      padding: 0.2rem 0.5rem;
+    }
+    .path-card.dimmed { opacity: 0.55; }
+    .path-icon { font-size: 1.4rem; margin-bottom: 0.5rem; }
+    .path-title { font-family: 'Fraunces', serif; font-size: 1.4rem; font-weight: 400; line-height: 1.1; margin-bottom: 0.35rem; }
+    .path-subtitle { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--smoke); text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 0.75rem; }
+    .path-desc { font-family: 'Fraunces', serif; font-size: 0.95rem; color: var(--ink); line-height: 1.45; flex: 1; margin-bottom: 1rem; font-style: italic; }
+    .path-eta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--smoke); margin-bottom: 1rem; text-transform: none; letter-spacing: 0; }
+    .path-eta strong { color: var(--ink); font-weight: 500; }
+    .path-btn-row { margin-top: auto; }
 
     .status-row { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--ink-dim); }
     .status-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
@@ -114,11 +179,130 @@
     .tx-body p { font-family: 'Fraunces', serif; font-weight: 300; font-size: 1.125rem; line-height: 1.7; white-space: pre-wrap; }
     @media (min-width: 768px) { .tx-body p { font-size: 1.25rem; } }
 
+    /* ===== Modal ===== */
+    .modal-overlay {
+      position: fixed; inset: 0;
+      background: rgba(15, 14, 13, 0.55);
+      z-index: 100;
+      display: flex; align-items: center; justify-content: center;
+      padding: 1rem;
+      animation: fadeIn 0.2s ease-out;
+    }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .modal {
+      background: var(--cream);
+      border: 1px solid var(--ink);
+      max-width: 38rem;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      animation: slideUp 0.25s ease-out;
+    }
+    @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+    .modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1.25rem 1.75rem;
+      border-bottom: 1px solid var(--ink);
+    }
+    .modal-title { font-family: 'Fraunces', serif; font-size: 1.5rem; font-weight: 400; }
+    .modal-close { background: none; border: none; cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 16px; color: var(--ink); padding: 0.25rem 0.5rem; }
+    .modal-close:hover { color: var(--rust); }
+    .modal-body { padding: 1.75rem; }
+    .modal-body h3 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 1.15rem; margin-bottom: 0.5rem; margin-top: 1.25rem; }
+    .modal-body h3:first-child { margin-top: 0; }
+    .modal-body p { font-family: 'Fraunces', serif; font-size: 1rem; line-height: 1.55; color: var(--ink); margin-bottom: 0.75rem; }
+    .modal-body ol { padding-left: 1.5rem; margin: 0.5rem 0 1rem; }
+    .modal-body ol li { font-family: 'Fraunces', serif; font-size: 1rem; line-height: 1.55; padding-left: 0.3rem; margin-bottom: 0.45rem; }
+    .modal-body strong { font-weight: 500; }
+    .modal-footer {
+      padding: 1.25rem 1.75rem;
+      border-top: 1px solid var(--ink-dim);
+      display: flex; gap: 0.75rem;
+      justify-content: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .pairing-code-box {
+      border: 1px solid var(--ink);
+      background: var(--paper);
+      padding: 1.5rem;
+      text-align: center;
+      margin: 1.25rem 0;
+    }
+    .pairing-code-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.25em;
+      color: var(--smoke);
+      margin-bottom: 0.5rem;
+    }
+    .pairing-code {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 2rem;
+      font-weight: 500;
+      letter-spacing: 0.05em;
+      color: var(--ink);
+      margin-bottom: 0.75rem;
+      user-select: all;
+    }
+    .pairing-copy {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      background: transparent;
+      border: 1px solid var(--ink);
+      padding: 0.4rem 0.8rem;
+      cursor: pointer;
+      color: var(--ink);
+    }
+    .pairing-copy:hover { background: var(--ink); color: var(--cream); }
+
+    .waiting-box {
+      border: 1px solid var(--ink-dim);
+      padding: 1.25rem;
+      display: flex; align-items: center; gap: 0.75rem;
+      margin-top: 1rem;
+    }
+    .waiting-box.connected { border-color: var(--ok); background: rgba(45, 106, 79, 0.06); }
+    .waiting-spinner {
+      width: 14px; height: 14px;
+      border: 2px solid var(--ink-faint);
+      border-top-color: var(--rust);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .waiting-text { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink); }
+    .waiting-text .sub { display: block; font-size: 10px; color: var(--smoke); margin-top: 0.25rem; text-transform: uppercase; letter-spacing: 0.15em; }
+
+    .manual-url-section {
+      margin-top: 1.5rem;
+      padding-top: 1.25rem;
+      border-top: 1px solid var(--ink-faint);
+    }
+    .manual-url-section summary {
+      cursor: pointer;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: var(--smoke);
+      padding: 0.25rem 0;
+    }
+    .manual-url-section summary:hover { color: var(--ink); }
+    .manual-url-section .body { margin-top: 0.75rem; }
+    .manual-url-input { width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--ink); font-family: 'JetBrains Mono', monospace; font-size: 12px; background: var(--cream); margin-bottom: 0.5rem; }
+
     footer { display: flex; align-items: center; justify-content: space-between; margin-top: 5rem; padding-top: 1.5rem; border-top: 1px solid var(--ink); gap: 0.75rem; flex-wrap: wrap; }
 
     .fade-up { animation: fade-up 0.5s ease-out forwards; }
     @keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     .hidden { display: none !important; }
+    a { color: var(--ink); }
+    a:hover { color: var(--rust); }
   </style>
 </head>
 <body>
@@ -131,14 +315,25 @@
 
       <section class="hero">
         <h1>Trans<em>cribe</em>.</h1>
-        <p>Any file, any size, any format. The server handles compression and silence-aware splitting. You get the words back.</p>
+        <p>Any file, any size, any format. Choose a quick path for small files, or set up your own private server for large ones.</p>
       </section>
+
+      <!-- Server status badge -->
+      <div id="server-badge" class="server-badge shared">
+        <div class="left">
+          <span class="dot"></span>
+          <span>
+            <span class="label" id="server-label">Using shared free server</span>
+            <span class="sub" id="server-sub">good for small files · slow for files over 100 MB</span>
+          </span>
+        </div>
+        <button id="server-change-btn" class="change-link" type="button">Change</button>
+      </div>
 
       <!-- API key panel -->
       <div class="panel" style="margin-bottom: 1.5rem;">
         <div class="key-panel">
           <div class="key-label mono-sm" style="color: var(--ink);">OpenAI API Key</div>
-
           <div id="key-edit-mode">
             <div class="key-input-wrap">
               <input id="api-key" class="key-input" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false" autocapitalize="off">
@@ -149,7 +344,6 @@
               <div id="key-error" class="err-inline hidden"></div>
             </div>
           </div>
-
           <div id="key-saved-mode" class="hidden">
             <div class="key-saved-line">
               <span class="check">✓</span>
@@ -157,9 +351,8 @@
               <button id="clear-key" class="reveal-btn" type="button" style="border-left: 1px solid var(--ink);">Change</button>
             </div>
           </div>
-
           <div class="key-help">
-            Your key is saved in this browser only — it travels to our server just long enough to call OpenAI on your behalf, then is wiped from memory. Get one at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" style="color: var(--ink);">platform.openai.com/api-keys</a>.
+            Your key is saved in this browser only. It travels to whichever server you're using (shared or your own) just long enough to call OpenAI, then is wiped from memory. Get one at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys</a>.
           </div>
         </div>
       </div>
@@ -170,7 +363,7 @@
         <div class="dz-visual">
           <div class="mono-sm" style="margin-bottom: 1.25rem;">[ Tap or drop file ]</div>
           <h2>Select an audio file</h2>
-          <div class="mono-sm" style="margin-top: 1.5rem; opacity: 0.6;">any audio or video · processed server-side</div>
+          <div class="mono-sm" style="margin-top: 1.5rem; opacity: 0.6;">any audio or video · MP3 / M4A finish fastest</div>
         </div>
       </label>
 
@@ -184,7 +377,37 @@
           </div>
           <div class="btn-row">
             <button id="change-btn" class="btn">Change</button>
-            <button id="run-btn" class="btn primary">Transcribe</button>
+            <button id="run-btn" class="btn primary hidden">Transcribe</button>
+          </div>
+        </div>
+
+        <!-- Path picker -->
+        <div id="path-picker" class="path-picker hidden">
+          <div class="path-picker-head">How would you like to process this file?</div>
+          <div class="path-grid">
+
+            <div id="path-quick" class="path-card">
+              <div class="path-icon">⚡</div>
+              <div class="path-title">Quick</div>
+              <div class="path-subtitle">Shared free server</div>
+              <p class="path-desc">No setup. Drop your file and we'll handle it on our shared server.</p>
+              <div class="path-eta" id="quick-eta">Estimated time: <strong id="quick-eta-time">~5 min</strong></div>
+              <div class="path-btn-row">
+                <button id="path-quick-btn" class="btn primary" style="width: 100%;">Use shared server</button>
+              </div>
+            </div>
+
+            <div id="path-advanced" class="path-card">
+              <div class="path-icon">🔧</div>
+              <div class="path-title">Advanced</div>
+              <div class="path-subtitle">Your own private server</div>
+              <p class="path-desc">Set up your own server once (5 min). After that, large files finish in a fraction of the time.</p>
+              <div class="path-eta">One-time setup: <strong>~5 min</strong> · Per file after: <strong id="advanced-eta-time">~5 min</strong></div>
+              <div class="path-btn-row">
+                <button id="path-advanced-btn" class="btn primary" style="width: 100%;">Set up my server</button>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -224,12 +447,141 @@
     </div>
   </main>
 
+  <!-- ===== Advanced setup modal ===== -->
+  <div id="advanced-modal" class="modal-overlay hidden">
+    <div class="modal">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-title">Set up your own server</div>
+        <button class="modal-close" id="modal-close-btn" type="button">✕</button>
+      </div>
+
+      <!-- Step 1: Explanation -->
+      <div id="modal-step-1" class="modal-body">
+        <p>Large files take a long time on our shared server. You can set up your own private server in about 5 minutes &mdash; you only do this once. After that, every transcription on this page will run on your own server, fast.</p>
+
+        <h3>What you'll need</h3>
+        <p>A free account at <strong>Render.com</strong> &mdash; the company that will host your server. Signing up takes about 30 seconds (you can use Google or GitHub).</p>
+
+        <h3>About cost</h3>
+        <p>Render will bill you directly, not us. Their free tier costs nothing and works fine for occasional use. If you transcribe often, their paid tier is $7 per month for much faster speed. You can choose either tier when you sign up &mdash; or upgrade later.</p>
+
+        <h3>What will happen</h3>
+        <ol>
+          <li>We'll give you a short code, like <code style="font-family: 'JetBrains Mono', monospace;">purple-falcon</code>. <strong>Keep this tab open.</strong></li>
+          <li>You'll click a button. Render opens in a new tab.</li>
+          <li>You sign in to Render, then paste the code into the one field it asks for.</li>
+          <li>Click "Create" in Render. Walk away for 3&ndash;5 minutes while Render builds your server.</li>
+          <li>Come back to this tab &mdash; it will already be connected to your new server.</li>
+        </ol>
+
+        <h3>What you control</h3>
+        <p>Your server is yours alone. Your audio files and your OpenAI key travel from your browser directly to your server &mdash; never through us. You can delete the server anytime from your Render dashboard.</p>
+      </div>
+
+      <!-- Step 2: Pairing -->
+      <div id="modal-step-2" class="modal-body hidden">
+        <p>Your unique pairing code:</p>
+
+        <div class="pairing-code-box">
+          <div class="pairing-code-label">Pairing Code &mdash; paste this in Render</div>
+          <div class="pairing-code" id="pairing-code-display">purple-falcon</div>
+          <button id="pairing-copy-btn" class="pairing-copy" type="button">Copy code</button>
+        </div>
+
+        <p style="font-size: 0.95rem;"><strong>Now:</strong> click the button below to open Render in a new tab. Sign in if needed, then look for the field labeled <code style="font-family: 'JetBrains Mono', monospace; font-size: 0.9rem;">PAIRING_CODE</code> and paste your code there. Click "Apply" and "Create Web Service".</p>
+
+        <p style="font-size: 0.95rem;"><strong>After clicking Create:</strong> come back to this tab. We'll watch for your server and connect automatically when it's ready (about 3&ndash;5 minutes).</p>
+
+        <div id="waiting-box" class="waiting-box hidden">
+          <div class="waiting-spinner" id="waiting-spinner"></div>
+          <div class="waiting-text">
+            <span id="waiting-main">Waiting for your server to come online&hellip;</span>
+            <span class="sub" id="waiting-sub">Usually 3&ndash;5 minutes after you click Create in Render</span>
+          </div>
+        </div>
+
+        <details class="manual-url-section">
+          <summary>Already have your server URL? Paste it here</summary>
+          <div class="body">
+            <input type="text" id="manual-url-input" class="manual-url-input" placeholder="https://your-server.onrender.com" autocomplete="off" spellcheck="false">
+            <button id="manual-url-save" class="btn">Connect to this URL</button>
+            <div id="manual-url-error" class="err-inline hidden" style="margin-top: 0.5rem;"></div>
+          </div>
+        </details>
+      </div>
+
+      <!-- Step 3: Connected -->
+      <div id="modal-step-3" class="modal-body hidden">
+        <div style="text-align: center; padding: 1rem 0;">
+          <div style="font-size: 3rem; margin-bottom: 0.5rem;">✓</div>
+          <h3 style="text-align: center; margin-bottom: 0.5rem;">You're connected!</h3>
+          <p style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--smoke); word-break: break-all;" id="connected-url"></p>
+          <p style="margin-top: 1.25rem;">Your file will now be transcribed using your private server. From now on, every transcription on this page will use your server until you change it back in the badge at the top.</p>
+        </div>
+      </div>
+
+      <div class="modal-footer" id="modal-footer-1">
+        <button class="btn" id="step-1-cancel">Cancel</button>
+        <button class="btn primary" id="step-1-next">Get started &rarr;</button>
+      </div>
+      <div class="modal-footer hidden" id="modal-footer-2">
+        <button class="btn" id="step-2-back">Back</button>
+        <a id="open-render-btn" class="btn primary" href="https://render.com/deploy?repo=https://github.com/yehoshuaking/audio-transcribe" target="_blank" rel="noopener" style="text-decoration: none;">Open Render &rarr;</a>
+      </div>
+      <div class="modal-footer hidden" id="modal-footer-3">
+        <button class="btn primary" id="step-3-done">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Server change panel ===== -->
+  <div id="server-change-modal" class="modal-overlay hidden">
+    <div class="modal" style="max-width: 30rem;">
+      <div class="modal-header">
+        <div class="modal-title">Choose server</div>
+        <button class="modal-close" id="server-change-close" type="button">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.95rem;">Pick which server processes your audio.</p>
+
+        <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem;">
+          <button id="use-shared-btn" class="btn" style="width: 100%; padding: 1rem; text-align: left;">
+            <div style="font-family: 'Fraunces', serif; font-size: 1.1rem; text-transform: none; letter-spacing: 0; font-weight: 400;">Shared free server</div>
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--smoke); text-transform: uppercase; letter-spacing: 0.15em; margin-top: 0.25rem;">Default · slow for large files</div>
+          </button>
+          <button id="use-own-btn" class="btn" style="width: 100%; padding: 1rem; text-align: left;">
+            <div style="font-family: 'Fraunces', serif; font-size: 1.1rem; text-transform: none; letter-spacing: 0; font-weight: 400;">My own server</div>
+            <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--smoke); text-transform: uppercase; letter-spacing: 0.15em; margin-top: 0.25rem;" id="own-server-sub">Set up takes ~5 min · faster after</div>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <script>
-    // ============== State ==============
+  (function () {
+    // ============================================================================
+    // Constants
+    // ============================================================================
     const KEY_STORAGE = 'openai_api_key';
+    const SERVER_URL_STORAGE = 'custom_server_url';
+    const PAIRING_STORAGE = 'pairing_in_progress';
+
+    // File size that flips the "Advanced is recommended" suggestion
+    const ADVANCED_RECOMMENDED_BYTES = 100 * 1024 * 1024;
+
+    // Word list for pairing codes (curated to be easy to type)
+    const PAIR_ADJ = ['purple','silver','golden','rapid','silent','crimson','azure','bright','quiet','swift','calm','wild','steady','gentle','keen','warm','noble','clever','brave','sunny','misty','frosty','breezy','sleepy'];
+    const PAIR_NOUN = ['falcon','river','meadow','harbor','ember','willow','canyon','aurora','beacon','wanderer','journey','cascade','sapphire','horizon','compass','signal','mountain','cypress','heron','lighthouse','redwood','clover','ranger','otter'];
+
+    // ============================================================================
+    // State
+    // ============================================================================
     const state = {
       apiKey: '',
       file: null,
+      serverUrl: '',  // empty = same origin (shared)
+      pairing: { code: '', polling: false, pollHandle: null },
       jobId: null,
       stage: 'idle',
       uploadProgress: 0,
@@ -240,18 +592,20 @@
       duration: null,
       error: '',
       elapsed: 0,
+      pathTaken: '',
     };
 
     let timerHandle = null;
     let elapsedStart = 0;
-    let pollHandle = null;
-
     const $ = (id) => document.getElementById(id);
 
+    // ============================================================================
+    // Helpers
+    // ============================================================================
     function fmtBytes(b) {
       if (b < 1024) return b + ' B';
       if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
-      if (b < 1073741824) return (b / 1048576).toFixed(2) + ' MB';
+      if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
       return (b / 1073741824).toFixed(2) + ' GB';
     }
     function fmtTime(s) {
@@ -259,6 +613,19 @@
       const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
       const mm = String(m).padStart(2, '0'), ss = String(sec).padStart(2, '0');
       return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+    }
+    function apiBase() {
+      // empty = current origin (the shared server is wherever this page is served from)
+      return state.serverUrl || '';
+    }
+    function maskKey(k) { return 'sk-···' + k.slice(-4); }
+
+    function isOwnServer() { return !!state.serverUrl; }
+
+    function generatePairingCode() {
+      const a = PAIR_ADJ[Math.floor(Math.random() * PAIR_ADJ.length)];
+      const b = PAIR_NOUN[Math.floor(Math.random() * PAIR_NOUN.length)];
+      return `${a}-${b}`;
     }
 
     function startTimer() {
@@ -270,13 +637,90 @@
     }
     function stopTimer() { if (timerHandle) clearInterval(timerHandle); timerHandle = null; }
 
-    // ============== Upload (XHR for progress) ==============
+    // ============================================================================
+    // Server badge rendering
+    // ============================================================================
+    function renderServerBadge() {
+      const badge = $('server-badge');
+      if (isOwnServer()) {
+        badge.classList.remove('shared');
+        badge.classList.add('own');
+        $('server-label').textContent = 'Using your private server';
+        try {
+          $('server-sub').textContent = new URL(state.serverUrl).host;
+        } catch {
+          $('server-sub').textContent = state.serverUrl;
+        }
+      } else {
+        badge.classList.remove('own');
+        badge.classList.add('shared');
+        $('server-label').textContent = 'Using shared free server';
+        $('server-sub').textContent = 'good for small files · slow for files over 100 MB';
+      }
+    }
+
+    // ============================================================================
+    // Path picker logic
+    // ============================================================================
+    function shouldRecommendAdvanced() {
+      if (!state.file) return false;
+      if (isOwnServer()) return false; // already on own server, no need
+      return state.file.size > ADVANCED_RECOMMENDED_BYTES;
+    }
+
+    function updateEtaText() {
+      if (!state.file) return;
+      const mb = state.file.size / 1048576;
+      // Crude estimate for shared free tier ffmpeg on Render: ~1x realtime
+      // We don't know duration yet so estimate from size as a rough proxy:
+      // WAV @ 16-bit stereo 44.1kHz ≈ 10MB/min, MP3 @ 128kbps ≈ 1MB/min
+      const ext = (state.file.name.split('.').pop() || '').toLowerCase();
+      const isCompressed = ['mp3','m4a','aac','opus','webm','ogg','mp4'].includes(ext);
+      let estMin;
+      if (isCompressed) {
+        if (state.file.size < 25 * 1024 * 1024) estMin = 1;       // direct path
+        else estMin = Math.max(2, mb / 30);                        // light work
+      } else {
+        estMin = Math.max(3, mb / 15);                             // full re-encode on free tier
+      }
+      const quickEta = estMin < 60 ? `~${Math.round(estMin)} min` : `~${(estMin/60).toFixed(1)} hr`;
+      $('quick-eta-time').textContent = quickEta;
+      // Advanced (after setup) — assume ~5x faster
+      const advEta = (estMin / 5);
+      $('advanced-eta-time').textContent = advEta < 60 ? `~${Math.max(1, Math.round(advEta))} min` : `~${(advEta/60).toFixed(1)} hr`;
+    }
+
+    function renderPathPicker() {
+      const picker = $('path-picker');
+      const runBtn = $('run-btn');
+
+      // If on own server already, OR file is small enough, OR a path was already chosen — skip the picker
+      if (!state.file || isOwnServer() || state.stage !== 'idle') {
+        picker.classList.add('hidden');
+        runBtn.classList.remove('hidden');
+        return;
+      }
+
+      // File is set, we're on shared server, idle — show picker
+      picker.classList.remove('hidden');
+      runBtn.classList.add('hidden');
+
+      // Mark recommended card
+      $('path-quick').classList.toggle('recommended', !shouldRecommendAdvanced());
+      $('path-advanced').classList.toggle('recommended', shouldRecommendAdvanced());
+      $('path-quick').classList.toggle('dimmed', shouldRecommendAdvanced());
+      $('path-advanced').classList.toggle('dimmed', !shouldRecommendAdvanced());
+
+      updateEtaText();
+    }
+
+    // ============================================================================
+    // Upload + poll
+    // ============================================================================
     function uploadFile(file, apiKey, onProgress) {
       return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
-        xhr.upload.onprogress = (e) => {
-          if (e.lengthComputable) onProgress(e.loaded / e.total);
-        };
+        xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
         xhr.onload = () => {
           if (xhr.status >= 200 && xhr.status < 300) {
             try { resolve(JSON.parse(xhr.responseText)); }
@@ -290,21 +734,17 @@
         xhr.onerror = () => reject(new Error('Network error during upload.'));
         const form = new FormData();
         form.append('file', file);
-        xhr.open('POST', '/api/transcribe');
+        xhr.open('POST', `${apiBase()}/api/transcribe`);
         xhr.setRequestHeader('Authorization', 'Bearer ' + apiKey);
         xhr.send(form);
       });
     }
 
-    // ============== Poll job status ==============
     async function pollJob(jobId, onUpdate) {
       while (true) {
         let res, data;
-        try {
-          res = await fetch(`/api/jobs/${jobId}`);
-        } catch (e) {
-          throw new Error('Lost connection to server.');
-        }
+        try { res = await fetch(`${apiBase()}/api/jobs/${jobId}`); }
+        catch { throw new Error('Lost connection to server.'); }
         if (!res.ok) throw new Error('Job not found (server may have restarted).');
         data = await res.json();
         onUpdate(data);
@@ -313,7 +753,6 @@
       }
     }
 
-    // ============== Run ==============
     async function run() {
       if (!state.file) return;
       if (!state.apiKey) {
@@ -341,6 +780,7 @@
           state.serverProgress = job.progress || 0;
           state.chunkInfo = job.chunkInfo || state.chunkInfo;
           state.duration = job.duration;
+          state.pathTaken = job.pathTaken || '';
           if (job.transcript) state.transcript = job.transcript;
           if (job.error) state.error = job.error;
           render();
@@ -358,7 +798,9 @@
       } finally { stopTimer(); }
     }
 
-    // ============== Render ==============
+    // ============================================================================
+    // Render
+    // ============================================================================
     function render() {
       $('dropzone').classList.toggle('hidden', !!state.file);
       $('file-panel').classList.toggle('hidden', !state.file);
@@ -375,6 +817,8 @@
         $('run-btn').textContent = busy ? 'Working...' : (state.apiKey ? 'Transcribe' : 'Add key first');
       }
 
+      renderPathPicker();
+
       const showStatus = state.stage !== 'idle';
       $('status-block').classList.toggle('hidden', !showStatus);
 
@@ -386,9 +830,7 @@
         else if (state.stage === 'error') dot.classList.add('error');
 
         let label = state.message || '';
-        if (state.stage === 'uploading') {
-          label = `Uploading · ${Math.round(state.uploadProgress * 100)}%`;
-        }
+        if (state.stage === 'uploading') label = `Uploading · ${Math.round(state.uploadProgress * 100)}%`;
         $('status-label').textContent = label;
 
         const showBar = ['uploading','server-stage'].includes(state.stage);
@@ -400,9 +842,7 @@
 
         const showNote = state.chunkInfo.total > 1 && state.stage === 'server-stage';
         $('status-note').classList.toggle('hidden', !showNote);
-        if (showNote) {
-          $('status-note').textContent = `${state.chunkInfo.usedSilence} of ${state.chunkInfo.total - 1} cuts aligned to silence`;
-        }
+        if (showNote) $('status-note').textContent = `${state.chunkInfo.usedSilence} of ${state.chunkInfo.total - 1} cuts aligned to silence`;
 
         $('error-msg').classList.toggle('hidden', !state.error);
         $('error-msg').textContent = state.error;
@@ -417,15 +857,122 @@
       }
     }
 
-    // ============== API key wiring ==============
-    function maskKey(k) { return 'sk-···' + k.slice(-4); }
+    // ============================================================================
+    // Pairing: poll for the user's server to phone home
+    // ============================================================================
+    function startPairingPoll(code) {
+      stopPairingPoll();
+      state.pairing.code = code;
+      state.pairing.polling = true;
+      $('waiting-box').classList.remove('hidden', 'connected');
+      $('waiting-main').textContent = 'Waiting for your server to come online…';
 
+      const tick = async () => {
+        if (!state.pairing.polling) return;
+        try {
+          // Always look up against this origin (the central registry)
+          const res = await fetch(`${window.location.origin}/api/pair/lookup/${encodeURIComponent(code)}`);
+          if (res.ok) {
+            const data = await res.json();
+            if (data && data.url) {
+              connectToServer(data.url);
+              return;
+            }
+          }
+        } catch (e) { /* keep polling */ }
+        state.pairing.pollHandle = setTimeout(tick, 2500);
+      };
+      tick();
+    }
+
+    function stopPairingPoll() {
+      state.pairing.polling = false;
+      if (state.pairing.pollHandle) {
+        clearTimeout(state.pairing.pollHandle);
+        state.pairing.pollHandle = null;
+      }
+    }
+
+    async function connectToServer(url) {
+      stopPairingPoll();
+      // Light sanity check: hit /health on the new server before committing
+      try {
+        const res = await fetch(`${url.replace(/\/+$/, '')}/health`, { method: 'GET' });
+        if (!res.ok) throw new Error(`Health check returned ${res.status}`);
+      } catch (e) {
+        $('waiting-main').textContent = 'Server responded but failed health check. Try refreshing.';
+        return;
+      }
+      state.serverUrl = url.replace(/\/+$/, '');
+      try { localStorage.setItem(SERVER_URL_STORAGE, state.serverUrl); } catch {}
+      try { localStorage.removeItem(PAIRING_STORAGE); } catch {}
+      renderServerBadge();
+      // Switch to step 3
+      $('connected-url').textContent = state.serverUrl;
+      $('modal-step-1').classList.add('hidden');
+      $('modal-step-2').classList.add('hidden');
+      $('modal-step-3').classList.remove('hidden');
+      $('modal-footer-1').classList.add('hidden');
+      $('modal-footer-2').classList.add('hidden');
+      $('modal-footer-3').classList.remove('hidden');
+      $('waiting-box').classList.add('connected');
+      $('waiting-spinner').style.display = 'none';
+      $('waiting-main').textContent = 'Connected!';
+      // Re-render in case path picker should now be hidden
+      render();
+    }
+
+    // ============================================================================
+    // Modal wiring
+    // ============================================================================
+    function openAdvancedModal(skipStep1) {
+      $('advanced-modal').classList.remove('hidden');
+      if (skipStep1) {
+        // Resume an in-progress pairing
+        $('modal-step-1').classList.add('hidden');
+        $('modal-step-2').classList.remove('hidden');
+        $('modal-step-3').classList.add('hidden');
+        $('modal-footer-1').classList.add('hidden');
+        $('modal-footer-2').classList.remove('hidden');
+        $('modal-footer-3').classList.add('hidden');
+      } else {
+        $('modal-step-1').classList.remove('hidden');
+        $('modal-step-2').classList.add('hidden');
+        $('modal-step-3').classList.add('hidden');
+        $('modal-footer-1').classList.remove('hidden');
+        $('modal-footer-2').classList.add('hidden');
+        $('modal-footer-3').classList.add('hidden');
+      }
+    }
+
+    function closeAdvancedModal() {
+      $('advanced-modal').classList.add('hidden');
+      // Note: we deliberately do NOT stop the pairing poll on close — it can
+      // resume if the user reopens this in the same session.
+    }
+
+    function goToPairingStep() {
+      const code = state.pairing.code || generatePairingCode();
+      state.pairing.code = code;
+      try { localStorage.setItem(PAIRING_STORAGE, code); } catch {}
+      $('pairing-code-display').textContent = code;
+      $('modal-step-1').classList.add('hidden');
+      $('modal-step-2').classList.remove('hidden');
+      $('modal-footer-1').classList.add('hidden');
+      $('modal-footer-2').classList.remove('hidden');
+      $('waiting-spinner').style.display = 'block';
+      $('waiting-box').classList.remove('connected');
+      startPairingPoll(code);
+    }
+
+    // ============================================================================
+    // API key wiring
+    // ============================================================================
     function showKeyError(msg) {
       const el = $('key-error');
       el.textContent = msg; el.classList.remove('hidden');
       setTimeout(() => el.classList.add('hidden'), 4000);
     }
-
     function showSavedKey(key) {
       $('key-preview').textContent = maskKey(key);
       $('key-edit-mode').classList.add('hidden');
@@ -468,13 +1015,9 @@
       if (e.key === 'Enter') { e.preventDefault(); $('save-key').click(); }
     });
 
-    // Restore saved key on load
-    try {
-      const saved = localStorage.getItem(KEY_STORAGE);
-      if (saved) { state.apiKey = saved; showSavedKey(saved); }
-    } catch {}
-
-    // ============== File wiring ==============
+    // ============================================================================
+    // File wiring
+    // ============================================================================
     const dz = $('dropzone'), fileInput = $('file-input');
     let dragCounter = 0;
     dz.addEventListener('dragenter', (e) => { e.preventDefault(); dragCounter++; dz.classList.add('drag-over'); });
@@ -520,7 +1063,111 @@
       URL.revokeObjectURL(url);
     });
 
+    // ============================================================================
+    // Path picker wiring
+    // ============================================================================
+    $('path-quick-btn').addEventListener('click', () => {
+      // Choose quick → hide picker, show transcribe button
+      $('path-picker').classList.add('hidden');
+      $('run-btn').classList.remove('hidden');
+      // Auto-run for convenience
+      run();
+    });
+
+    $('path-advanced-btn').addEventListener('click', () => openAdvancedModal(false));
+
+    // ============================================================================
+    // Modal wiring
+    // ============================================================================
+    $('modal-close-btn').addEventListener('click', closeAdvancedModal);
+    $('step-1-cancel').addEventListener('click', closeAdvancedModal);
+    $('step-3-done').addEventListener('click', () => {
+      closeAdvancedModal();
+      render();
+    });
+    $('step-1-next').addEventListener('click', goToPairingStep);
+    $('step-2-back').addEventListener('click', () => {
+      stopPairingPoll();
+      $('modal-step-1').classList.remove('hidden');
+      $('modal-step-2').classList.add('hidden');
+      $('modal-footer-1').classList.remove('hidden');
+      $('modal-footer-2').classList.add('hidden');
+    });
+
+    $('pairing-copy-btn').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(state.pairing.code); } catch {}
+      const b = $('pairing-copy-btn'); const old = b.textContent;
+      b.textContent = 'Copied ✓'; setTimeout(() => { b.textContent = old; }, 1500);
+    });
+
+    $('manual-url-save').addEventListener('click', async () => {
+      const raw = $('manual-url-input').value.trim();
+      const err = $('manual-url-error');
+      err.classList.add('hidden');
+      if (!raw) { err.textContent = 'Paste your server URL first.'; err.classList.remove('hidden'); return; }
+      let url;
+      try { url = new URL(raw.startsWith('http') ? raw : `https://${raw}`).toString().replace(/\/+$/, ''); }
+      catch { err.textContent = 'That URL doesn\'t look valid.'; err.classList.remove('hidden'); return; }
+      try {
+        const r = await fetch(`${url}/health`);
+        if (!r.ok) throw new Error('Server unreachable');
+        await connectToServer(url);
+      } catch (e) {
+        err.textContent = 'Couldn\'t reach that server. Check the URL and try again.';
+        err.classList.remove('hidden');
+      }
+    });
+
+    // ============================================================================
+    // Server badge / server change modal
+    // ============================================================================
+    $('server-change-btn').addEventListener('click', () => {
+      $('server-change-modal').classList.remove('hidden');
+      if (isOwnServer()) {
+        $('own-server-sub').textContent = 'Currently connected · ' + state.serverUrl;
+      } else {
+        $('own-server-sub').textContent = 'Set up takes ~5 min · faster after';
+      }
+    });
+    $('server-change-close').addEventListener('click', () => $('server-change-modal').classList.add('hidden'));
+
+    $('use-shared-btn').addEventListener('click', () => {
+      state.serverUrl = '';
+      try { localStorage.removeItem(SERVER_URL_STORAGE); } catch {}
+      renderServerBadge();
+      render();
+      $('server-change-modal').classList.add('hidden');
+    });
+    $('use-own-btn').addEventListener('click', () => {
+      $('server-change-modal').classList.add('hidden');
+      openAdvancedModal(false);
+    });
+
+    // ============================================================================
+    // Restore state from localStorage
+    // ============================================================================
+    try {
+      const savedKey = localStorage.getItem(KEY_STORAGE);
+      if (savedKey) { state.apiKey = savedKey; showSavedKey(savedKey); }
+    } catch {}
+    try {
+      const savedServer = localStorage.getItem(SERVER_URL_STORAGE);
+      if (savedServer) { state.serverUrl = savedServer; renderServerBadge(); }
+    } catch {}
+    // If a pairing was in progress and not yet completed, resume polling
+    try {
+      const pendingPair = localStorage.getItem(PAIRING_STORAGE);
+      if (pendingPair && !state.serverUrl) {
+        // Don't auto-pop the modal, but resume polling silently
+        state.pairing.code = pendingPair;
+        startPairingPoll(pendingPair);
+        // Stash that we have a pending pair so the user can open the modal to see it
+      }
+    } catch {}
+
+    renderServerBadge();
     render();
+  })();
   </script>
 </body>
 </html>

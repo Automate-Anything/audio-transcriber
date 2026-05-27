@@ -6,5 +6,7 @@ services:
     region: oregon
     healthCheckPath: /health
     envVars:
-      - key: OPENAI_API_KEY
+      - key: PAIRING_CODE
         sync: false
+      - key: REGISTER_URL
+        value: https://audio-transcriber-ccy7.onrender.com
