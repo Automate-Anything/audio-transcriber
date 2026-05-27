@@ -55,6 +55,30 @@ Vercel won't work: their serverless function bundles cap at 50MB and ffmpeg is ~
 
 You get a URL like `https://audio-transcribe-xxxx.onrender.com`. Anyone can open it, paste their own OpenAI key, and use the app.
 
+## Optional: split-deploy with Cloudflare Pages (frontend) + Render (API)
+
+You can host the static frontend on Cloudflare Pages (free, edge-cached, custom domain) and keep only the API on Render. The frontend already knows to call `CENTRAL_API` (a constant in `public/index.html`) absolutely, so cross-origin works out of the box. The Render server has CORS open.
+
+**Setup:**
+
+1. The repo's `public/` directory contains everything Cloudflare needs (`index.html` + `_headers` for security headers).
+2. In Cloudflare Pages → Create application → Connect to Git → pick this repo.
+3. Build settings:
+   - **Framework preset:** None
+   - **Build command:** *(leave blank)*
+   - **Build output directory:** `public`
+4. Save and deploy. Cloudflare gives you a `*.pages.dev` URL.
+5. (Optional) Add your custom domain in Pages → Custom domains → enter domain. Cloudflare handles DNS + cert.
+
+**Update `CENTRAL_API` in `public/index.html`** to your actual Render URL if it differs from the default (`https://audio-transcriber-ccy7.onrender.com`). Cloudflare Pages will auto-redeploy on every push to `main`.
+
+**Notes:**
+
+- Frontend is now always-on and globally edge-cached. First API request still wakes the sleeping Render service (~30s on free tier).
+- Two URLs work after split: your custom domain (Cloudflare) and the Render URL. The Render-served frontend is unchanged so it's still a valid fallback if Cloudflare ever has issues.
+- All API calls (transcribe, pairing) hit Render. Same rate limits apply.
+- Cloudflare Pages free tier includes 500 builds/month and unlimited bandwidth — generous for personal use.
+
 ## Key handling, in detail
 
 - **In the browser**: saved to `localStorage` so the user pastes it once per browser.

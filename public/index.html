@@ -566,6 +566,13 @@
     const SERVER_URL_STORAGE = 'custom_server_url';
     const PAIRING_STORAGE = 'pairing_in_progress';
 
+    // Where the API lives. When the frontend is served from this same origin
+    // (e.g. directly from Render), 'same-origin' fetches still work. When
+    // hosted elsewhere (e.g. Cloudflare Pages with a custom domain), all
+    // API calls go cross-origin to this URL. CORS on the Render side
+    // permits any origin so this works either way.
+    const CENTRAL_API = 'https://audio-transcriber-ccy7.onrender.com';
+
     // File size that flips the "Advanced is recommended" suggestion
     const ADVANCED_RECOMMENDED_BYTES = 100 * 1024 * 1024;
 
@@ -614,8 +621,10 @@
       return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
     }
     function apiBase() {
-      // empty = current origin (the shared server is wherever this page is served from)
-      return state.serverUrl || '';
+      // BYO server takes precedence; otherwise route to the central API
+      // (absolute URL, so this works whether frontend is on Render or
+      // hosted elsewhere like Cloudflare Pages with a custom domain).
+      return state.serverUrl || CENTRAL_API;
     }
     function maskKey(k) { return 'sk-···' + k.slice(-4); }
 
@@ -882,7 +891,10 @@
       const tick = async () => {
         if (!state.pairing.polling) return;
         try {
-          const res = await fetch(`${window.location.origin}/api/pair/lookup/${encodeURIComponent(code)}`);
+          // Pairing registry lives on the central server only. Even if the
+          // frontend is on Cloudflare and the user has set a BYO server,
+          // pairing lookups always go to CENTRAL_API.
+          const res = await fetch(`${CENTRAL_API}/api/pair/lookup/${encodeURIComponent(code)}`);
           if (res.ok) {
             const data = await res.json();
             if (data && data.url) {
