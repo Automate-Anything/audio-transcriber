@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: audio-transcribe
+    name: audio-transcriber
     runtime: docker
     plan: free
     region: oregon

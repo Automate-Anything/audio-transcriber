@@ -53,7 +53,7 @@ Vercel won't work: their serverless function bundles cap at 50MB and ffmpeg is ~
 5. **No environment variables needed.** Each user adds their own key in the browser.
 6. Click **Create Web Service**. Initial build takes ~3–5 min (Docker has to install ffmpeg).
 
-You get a URL like `https://audio-transcribe-xxxx.onrender.com`. Anyone can open it, paste their own OpenAI key, and use the app.
+You get a URL like `https://audio-transcriber-xxxx.onrender.com`. Anyone can open it, paste their own OpenAI key, and use the app.
 
 ## Optional: split-deploy with Cloudflare Pages (frontend) + Render (API)
 
@@ -115,7 +115,7 @@ Constants at the top of `server.js`:
 ## Files
 
 ```
-audio-transcribe/
+audio-transcriber/
   server.js              ← Express + ffmpeg pipeline
   public/index.html      ← single-file frontend
   Dockerfile             ← installs ffmpeg, runs Node
