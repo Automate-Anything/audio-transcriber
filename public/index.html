@@ -36,12 +36,24 @@
     }
     /* paper-grain overlay removed — keep background clean */
 
-    /* ===== Top nav (mirrors automateanything.ai structure) ===== */
+    /* ===== Top nav (mirrors automateanything.ai — dark navy theme) ===== */
+    :root {
+      --aa-bg: #121b2c;
+      --aa-bg-alt: #000000;
+      --aa-text: #94a3b8;
+      --aa-text-strong: #ffffff;
+      --aa-accent: #4b6c8c;
+      --aa-cta: #006cbe;
+    }
     .topnav {
-      position: relative;
+      position: fixed;
+      top: 0; left: 0; right: 0;
       z-index: 50;
-      background: #ffffff;
-      border-bottom: 1px solid var(--ink-faint);
+      background: rgba(18, 27, 44, 0.95);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(75, 108, 140, 0.1);
+      box-shadow: 0 4px 20px rgba(0,0,0,0.15);
     }
     .topnav-inner {
       max-width: 80rem;
@@ -49,146 +61,265 @@
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0.75rem 1.25rem;
+      padding: 0.6rem 1rem;
       gap: 1rem;
     }
-    @media (min-width: 768px) { .topnav-inner { padding: 0.85rem 2rem; } }
+    @media (min-width: 768px) { .topnav-inner { padding: 0.75rem 1.5rem; } }
+    @media (min-width: 1024px) { .topnav-inner { padding: 0.85rem 2rem; } }
 
-    .topnav-logo { display: flex; align-items: center; gap: 0.6rem; text-decoration: none; color: var(--ink); }
-    .topnav-logo img { height: 28px; width: auto; display: block; }
-    .topnav-logo-text { font-family: var(--font-sans); font-weight: 600; font-size: 1.05rem; letter-spacing: -0.01em; }
+    .topnav-logo { display: flex; align-items: center; gap: 0.4rem; text-decoration: none; }
+    .topnav-logo img { height: 28px; width: 28px; display: block; }
+    @media (min-width: 640px) { .topnav-logo img { height: 32px; width: 32px; } }
+    @media (min-width: 768px) { .topnav-logo img { height: 36px; width: 36px; } }
+    .topnav-logo-text { font-family: var(--font-sans); font-weight: 700; font-size: 1.1rem; letter-spacing: -0.01em; color: var(--aa-text-strong); line-height: 1; }
+    @media (min-width: 640px) { .topnav-logo-text { font-size: 1.2rem; } }
+    @media (min-width: 768px) { .topnav-logo-text { font-size: 1.4rem; } }
+    .topnav-logo-text .accent-half { color: var(--aa-accent); transition: color 0.3s; }
+    .topnav-logo:hover .accent-half { color: var(--aa-text-strong); }
 
-    .topnav-menu { display: none; align-items: center; gap: 0.25rem; }
-    @media (min-width: 980px) { .topnav-menu { display: flex; } }
+    .topnav-menu { display: none; align-items: center; gap: 0.5rem; }
+    @media (min-width: 1024px) { .topnav-menu { display: flex; gap: 1.5rem; } }
+    @media (min-width: 1280px) { .topnav-menu { gap: 2rem; } }
 
     .topnav-item { position: relative; }
     .topnav-link {
-      display: inline-flex; align-items: center; gap: 0.25rem;
-      padding: 0.5rem 0.85rem;
+      display: inline-flex; align-items: center; gap: 0.3rem;
+      padding: 0.5rem 0.25rem;
       font-family: var(--font-sans);
-      font-size: 0.92rem;
-      color: var(--ink);
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--aa-text);
       text-decoration: none;
       cursor: pointer;
       background: none;
       border: none;
-      border-radius: 4px;
+      position: relative;
+      transition: color 0.2s;
     }
-    .topnav-link:hover { background: rgba(0,0,0,0.04); }
-    .topnav-link .chev { font-size: 0.7rem; opacity: 0.6; }
+    .topnav-link:hover, .topnav-item.open > .topnav-link { color: var(--aa-text-strong); }
+    .topnav-link .label { position: relative; }
+    .topnav-link .label::after {
+      content: '';
+      position: absolute;
+      bottom: -4px; left: 0;
+      width: 0; height: 2px;
+      background: var(--aa-accent);
+      transition: width 0.3s;
+    }
+    .topnav-link:hover .label::after,
+    .topnav-item.open > .topnav-link .label::after { width: 100%; }
+    .topnav-link .chev {
+      display: inline-block;
+      font-size: 0.75rem;
+      opacity: 0.8;
+      transition: transform 0.3s, color 0.2s;
+    }
+    .topnav-item.open .topnav-link .chev { transform: rotate(180deg); color: var(--aa-accent); }
+
+    .topnav-phone {
+      font-family: var(--font-sans);
+      font-size: 0.9rem;
+      font-weight: 500;
+      color: var(--aa-text);
+      text-decoration: none;
+      padding: 0.5rem 0.25rem;
+      transition: color 0.2s;
+      position: relative;
+    }
+    .topnav-phone::after {
+      content: '';
+      position: absolute;
+      bottom: 4px; left: 0.25rem; right: 0.25rem;
+      height: 2px;
+      background: var(--aa-accent);
+      width: 0;
+      transition: width 0.3s;
+    }
+    .topnav-phone:hover { color: var(--aa-text-strong); }
+    .topnav-phone:hover::after { width: calc(100% - 0.5rem); }
 
     .topnav-cta {
-      padding: 0.5rem 1.05rem;
+      padding: 0.55rem 1.2rem;
       font-family: var(--font-sans);
-      font-size: 0.92rem;
-      background: var(--ink);
-      color: #ffffff;
+      font-size: 0.9rem;
+      font-weight: 500;
+      background: var(--aa-cta);
+      color: var(--aa-text-strong);
       text-decoration: none;
-      border-radius: 999px;
-      margin-left: 0.4rem;
+      border-radius: 6px;
+      transition: background 0.3s, transform 0.15s, box-shadow 0.15s;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+      white-space: nowrap;
     }
-    .topnav-cta:hover { background: var(--rust); }
+    .topnav-cta:hover {
+      background: var(--aa-accent);
+      transform: scale(1.02);
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+    }
+
+    .topnav-right { display: none; align-items: center; gap: 1.5rem; }
+    @media (min-width: 1024px) { .topnav-right { display: flex; } }
+    @media (min-width: 1280px) { .topnav-right { gap: 2rem; } }
 
     /* Dropdown panels */
     .topnav-dropdown {
       position: absolute;
-      top: calc(100% + 6px);
+      top: calc(100% + 12px);
       left: 0;
-      min-width: 320px;
-      background: #ffffff;
-      border: 1px solid var(--ink-faint);
-      box-shadow: 0 10px 30px rgba(0,0,0,0.08);
-      padding: 0.75rem;
-      border-radius: 6px;
+      min-width: 280px;
+      background: var(--aa-bg-alt);
+      border: 1px solid rgba(75, 108, 140, 0.2);
+      box-shadow: 0 12px 36px rgba(0,0,0,0.4);
+      padding: 0.75rem 0;
+      border-radius: 8px;
       display: none;
+      animation: aaFade 0.25s ease-out;
     }
+    @keyframes aaFade {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @media (min-width: 1280px) { .topnav-dropdown { min-width: 320px; } }
     .topnav-item.open > .topnav-dropdown { display: block; }
-    .topnav-dropdown a {
-      display: block;
-      padding: 0.6rem 0.75rem;
-      text-decoration: none;
-      color: var(--ink);
-      border-radius: 4px;
-      font-family: var(--font-sans);
-    }
-    .topnav-dropdown a:hover { background: rgba(0,0,0,0.04); }
-    .topnav-dropdown a .title { display: block; font-size: 0.95rem; font-weight: 500; }
-    .topnav-dropdown a .desc { display: block; font-size: 0.8rem; color: var(--smoke); margin-top: 0.1rem; }
     .topnav-dropdown .group-label {
       display: block;
-      padding: 0.35rem 0.75rem 0.5rem;
-      font-family: var(--font-mono);
-      font-size: 9px;
+      padding: 0.25rem 1.25rem 0.6rem;
+      font-family: var(--font-sans);
+      font-size: 10px;
+      font-weight: 600;
       text-transform: uppercase;
-      letter-spacing: 0.2em;
-      color: var(--smoke);
+      letter-spacing: 0.1em;
+      color: rgba(75, 108, 140, 0.7);
     }
+    .topnav-dropdown a {
+      display: block;
+      padding: 0.6rem 1.25rem;
+      text-decoration: none;
+      color: var(--aa-text);
+      transition: background 0.2s, color 0.2s;
+    }
+    .topnav-dropdown a:hover { background: rgba(75, 108, 140, 0.1); color: var(--aa-text-strong); }
+    .topnav-dropdown a.is-main { color: var(--aa-text-strong); border-bottom: 1px solid rgba(75, 108, 140, 0.1); margin-bottom: 0.4rem; padding-bottom: 0.7rem; }
+    .topnav-dropdown a .title { display: block; font-family: var(--font-sans); font-size: 0.9rem; font-weight: 500; }
+    .topnav-dropdown a .desc { display: block; font-family: var(--font-sans); font-size: 0.75rem; color: rgba(148, 163, 184, 0.6); margin-top: 0.15rem; }
 
-    /* Hamburger (mobile) */
+    /* Hamburger (mobile/tablet) */
     .topnav-hamburger {
       display: inline-flex;
       flex-direction: column;
       justify-content: center;
-      gap: 4px;
-      width: 36px; height: 36px;
+      gap: 5px;
+      width: 40px; height: 40px;
       background: none; border: none;
       cursor: pointer;
       padding: 0;
       align-items: center;
+      border-radius: 6px;
+      transition: background 0.2s;
     }
-    @media (min-width: 980px) { .topnav-hamburger { display: none; } }
-    .topnav-hamburger span { display: block; width: 18px; height: 1.5px; background: var(--ink); transition: transform 0.2s, opacity 0.2s; }
-    .topnav.open .topnav-hamburger span:nth-child(1) { transform: translateY(5.5px) rotate(45deg); }
+    .topnav-hamburger:hover { background: rgba(75, 108, 140, 0.1); }
+    @media (min-width: 1024px) { .topnav-hamburger { display: none; } }
+    .topnav-hamburger span { display: block; width: 20px; height: 2px; background: var(--aa-text); transition: transform 0.25s, opacity 0.25s, background 0.2s; }
+    .topnav.open .topnav-hamburger span { background: var(--aa-text-strong); }
+    .topnav.open .topnav-hamburger span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
     .topnav.open .topnav-hamburger span:nth-child(2) { opacity: 0; }
-    .topnav.open .topnav-hamburger span:nth-child(3) { transform: translateY(-5.5px) rotate(-45deg); }
+    .topnav.open .topnav-hamburger span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
 
+    /* Mobile menu (full-screen slide-in) */
     .topnav-mobile {
-      display: none;
-      border-top: 1px solid var(--ink-faint);
-      padding: 0.5rem 1rem 1rem;
-      background: #ffffff;
+      position: fixed;
+      top: 0; right: 0;
+      width: 100%; height: 100vh;
+      background: var(--aa-bg);
+      padding: 4.5rem 1.5rem 2rem;
+      overflow-y: auto;
+      transform: translateX(100%);
+      transition: transform 0.3s ease-in-out;
+      z-index: 45;
     }
-    .topnav.open .topnav-mobile { display: block; }
-    @media (min-width: 980px) { .topnav-mobile { display: none !important; } }
-    .topnav-mobile details { border-bottom: 1px solid var(--ink-faint); }
-    .topnav-mobile details:last-of-type { border-bottom: none; }
+    .topnav.open .topnav-mobile { transform: translateX(0); }
+    @media (min-width: 1024px) { .topnav-mobile { display: none !important; } }
+    .topnav-mobile details { border-bottom: 1px solid rgba(75, 108, 140, 0.1); }
     .topnav-mobile summary {
-      padding: 0.85rem 0.5rem;
-      font-family: var(--font-sans); font-size: 0.95rem; cursor: pointer;
+      padding: 1rem 0.25rem;
+      font-family: var(--font-sans);
+      font-size: 1.05rem;
+      font-weight: 500;
+      color: var(--aa-text);
+      cursor: pointer;
       list-style: none;
       display: flex; justify-content: space-between; align-items: center;
+      transition: color 0.2s;
     }
     .topnav-mobile summary::-webkit-details-marker { display: none; }
-    .topnav-mobile summary::after { content: '+'; font-size: 1.1rem; color: var(--smoke); }
-    .topnav-mobile details[open] summary::after { content: '−'; }
+    .topnav-mobile details[open] > summary { color: var(--aa-text-strong); }
+    .topnav-mobile summary::after {
+      content: '▾';
+      font-size: 0.85rem;
+      color: var(--aa-text);
+      transition: transform 0.25s, color 0.2s;
+    }
+    .topnav-mobile details[open] > summary::after { transform: rotate(180deg); color: var(--aa-accent); }
+    .topnav-mobile .topnav-mobile-section { padding: 0 0 0.75rem 0.75rem; border-left: 1px solid rgba(75, 108, 140, 0.3); margin-left: 0.25rem; }
     .topnav-mobile .topnav-mobile-section a {
       display: block;
-      padding: 0.55rem 1rem;
+      padding: 0.55rem 0.75rem;
       text-decoration: none;
-      color: var(--ink);
+      color: var(--aa-text);
       font-family: var(--font-sans);
-      font-size: 0.9rem;
+      font-size: 0.95rem;
     }
-    .topnav-mobile .topnav-mobile-section a .desc { color: var(--smoke); font-size: 0.75rem; display: block; margin-top: 0.1rem; }
+    .topnav-mobile .topnav-mobile-section a:hover { color: var(--aa-text-strong); }
+    .topnav-mobile .topnav-mobile-section a .desc { color: rgba(148, 163, 184, 0.5); font-size: 0.75rem; display: block; margin-top: 0.15rem; }
+    .topnav-mobile .topnav-mobile-section .group-label {
+      display: block;
+      padding: 0.5rem 0.75rem 0.25rem;
+      font-family: var(--font-sans);
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: rgba(75, 108, 140, 0.7);
+    }
     .topnav-mobile .topnav-direct {
       display: block;
-      padding: 0.85rem 0.5rem;
+      padding: 1rem 0.25rem;
       text-decoration: none;
-      color: var(--ink);
-      font-family: var(--font-sans); font-size: 0.95rem;
-      border-bottom: 1px solid var(--ink-faint);
+      color: var(--aa-text);
+      font-family: var(--font-sans);
+      font-size: 1.05rem;
+      font-weight: 500;
+      border-bottom: 1px solid rgba(75, 108, 140, 0.1);
+    }
+    .topnav-mobile .topnav-direct:hover { color: var(--aa-text-strong); }
+    .topnav-mobile .topnav-phone-mobile {
+      display: block;
+      padding: 1rem 0.25rem;
+      text-decoration: none;
+      color: var(--aa-text);
+      font-family: var(--font-sans);
+      font-size: 1rem;
+      border-bottom: 1px solid rgba(75, 108, 140, 0.1);
     }
     .topnav-mobile .topnav-cta-mobile {
       display: block;
-      margin-top: 0.85rem;
-      padding: 0.7rem;
-      background: var(--ink);
-      color: #ffffff;
+      margin-top: 1.5rem;
+      padding: 0.85rem;
+      background: var(--aa-cta);
+      color: var(--aa-text-strong);
       text-align: center;
       text-decoration: none;
-      border-radius: 999px;
-      font-family: var(--font-sans); font-size: 0.95rem;
+      border-radius: 6px;
+      font-family: var(--font-sans);
+      font-weight: 500;
+      font-size: 1rem;
+      transition: background 0.3s;
     }
+    .topnav-mobile .topnav-cta-mobile:hover { background: var(--aa-accent); }
+
+    /* Push main content below the fixed nav */
+    main { padding-top: 4.5rem !important; }
+    @media (min-width: 768px) { main { padding-top: 5rem !important; } }
 
     main { position: relative; z-index: 10; padding: 1.5rem 1.25rem; }
     @media (min-width: 768px) { main { padding: 2rem 3rem; } }
@@ -460,15 +591,16 @@
     <div class="topnav-inner">
       <a class="topnav-logo" href="https://automateanything.ai/">
         <img src="https://automateanything.ai/images/AutomateAnything.png" alt="AutomateAnything">
-        <span class="topnav-logo-text">AutomateAnything</span>
+        <span class="topnav-logo-text">Automate<span class="accent-half">Anything</span></span>
       </a>
 
       <div class="topnav-menu">
 
         <div class="topnav-item" data-dropdown>
-          <button class="topnav-link" type="button">Solutions <span class="chev">▾</span></button>
+          <button class="topnav-link" type="button"><span class="label">Solutions</span> <span class="chev">▾</span></button>
           <div class="topnav-dropdown">
-            <a href="https://automateanything.ai/solutions/"><span class="title">View All Solutions</span><span class="desc">Explore all automation capabilities</span></a>
+            <span class="group-label">Our Solutions</span>
+            <a class="is-main" href="https://automateanything.ai/solutions/"><span class="title">View All Solutions</span><span class="desc">Explore all automation capabilities</span></a>
             <span class="group-label">Jump to</span>
             <a href="https://automateanything.ai/solutions/#data-intake"><span class="title">Automated Data Intake</span><span class="desc">Pull in data from any source</span></a>
             <a href="https://automateanything.ai/solutions/#task-routing"><span class="title">Task Routing & Assignment</span><span class="desc">Deliver info to the right people</span></a>
@@ -480,8 +612,9 @@
         </div>
 
         <div class="topnav-item" data-dropdown>
-          <button class="topnav-link" type="button">Use Cases <span class="chev">▾</span></button>
+          <button class="topnav-link" type="button"><span class="label">Use Cases</span> <span class="chev">▾</span></button>
           <div class="topnav-dropdown">
+            <span class="group-label">By Department</span>
             <a href="https://automateanything.ai/use-cases/marketing/"><span class="title">Marketing</span><span class="desc">Drive more leads</span></a>
             <a href="https://automateanything.ai/use-cases/sales/"><span class="title">Sales</span><span class="desc">Increase conversion rates</span></a>
             <a href="https://automateanything.ai/use-cases/operations/"><span class="title">Operations</span><span class="desc">Improve efficiency</span></a>
@@ -492,8 +625,9 @@
         </div>
 
         <div class="topnav-item" data-dropdown>
-          <button class="topnav-link" type="button">Industry <span class="chev">▾</span></button>
+          <button class="topnav-link" type="button"><span class="label">Industry</span> <span class="chev">▾</span></button>
           <div class="topnav-dropdown">
+            <span class="group-label">By Industry</span>
             <a href="https://automateanything.ai/industry/professional-services/"><span class="title">Professional Services</span><span class="desc">Firms, agencies, and consultancies</span></a>
             <a href="https://automateanything.ai/industry/healthcare/"><span class="title">Healthcare</span><span class="desc">Clinics and patient services</span></a>
             <a href="https://automateanything.ai/industry/financial-insurance/"><span class="title">Financial & Insurance</span><span class="desc">Brokers, MGAs, and lenders</span></a>
@@ -502,7 +636,11 @@
           </div>
         </div>
 
-        <a class="topnav-link" href="https://automateanything.ai/resources/">Resources</a>
+        <a class="topnav-link" href="https://automateanything.ai/resources/"><span class="label">Resources</span></a>
+      </div>
+
+      <div class="topnav-right">
+        <a class="topnav-phone" href="tel:18452109672" aria-label="Call us at 1 (845) 210-9672">+1 (845) 210-9672</a>
         <a class="topnav-cta" href="https://automateanything.ai/contact/">Get Started</a>
       </div>
 
@@ -515,7 +653,9 @@
       <details>
         <summary>Solutions</summary>
         <div class="topnav-mobile-section">
+          <span class="group-label">Our Solutions</span>
           <a href="https://automateanything.ai/solutions/"><span class="title">View All Solutions</span><span class="desc">Explore all automation capabilities</span></a>
+          <span class="group-label">Jump to</span>
           <a href="https://automateanything.ai/solutions/#data-intake">Automated Data Intake</a>
           <a href="https://automateanything.ai/solutions/#task-routing">Task Routing & Assignment</a>
           <a href="https://automateanything.ai/solutions/#workflow-automation">End-to-End Workflow Automation</a>
@@ -527,6 +667,7 @@
       <details>
         <summary>Use Cases</summary>
         <div class="topnav-mobile-section">
+          <span class="group-label">By Department</span>
           <a href="https://automateanything.ai/use-cases/marketing/">Marketing</a>
           <a href="https://automateanything.ai/use-cases/sales/">Sales</a>
           <a href="https://automateanything.ai/use-cases/operations/">Operations</a>
@@ -538,6 +679,7 @@
       <details>
         <summary>Industry</summary>
         <div class="topnav-mobile-section">
+          <span class="group-label">By Industry</span>
           <a href="https://automateanything.ai/industry/professional-services/">Professional Services</a>
           <a href="https://automateanything.ai/industry/healthcare/">Healthcare</a>
           <a href="https://automateanything.ai/industry/financial-insurance/">Financial & Insurance</a>
@@ -546,6 +688,7 @@
         </div>
       </details>
       <a class="topnav-direct" href="https://automateanything.ai/resources/">Resources</a>
+      <a class="topnav-phone-mobile" href="tel:18452109672">+1 (845) 210-9672</a>
       <a class="topnav-cta-mobile" href="https://automateanything.ai/contact/">Get Started</a>
     </div>
   </nav>
