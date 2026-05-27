@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Transcribe</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --cream: #F5F1EA;
+      --ink: #0F0E0D;
+      --rust: #C04A2B;
+      --smoke: #8A8378;
+      --ok: #2D6A4F;
+      --ink-dim: rgba(15, 14, 13, 0.3);
+      --ink-faint: rgba(15, 14, 13, 0.1);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body {
+      background: var(--cream);
+      color: var(--ink);
+      font-family: 'Instrument Sans', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      min-height: 100vh;
+    }
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      pointer-events: none; z-index: 1;
+      opacity: 0.4; mix-blend-mode: multiply;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.05  0 0 0 0 0.05  0 0 0 0 0.05  0 0 0 0.08 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    }
+
+    main { position: relative; z-index: 10; padding: 2.5rem 1.5rem; }
+    @media (min-width: 768px) { main { padding: 4rem 3rem; } }
+    .container { max-width: 64rem; margin: 0 auto; }
+
+    .mono { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--smoke); }
+    .mono-sm { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.3em; color: var(--smoke); }
+
+    header { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1px solid var(--ink); padding-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap; }
+
+    .hero { padding: 3rem 0 2.5rem; }
+    @media (min-width: 768px) { .hero { padding: 5rem 0 2.5rem; } }
+    .hero h1 { font-family: 'Fraunces', serif; font-weight: 300; font-size: 4rem; line-height: 0.85; letter-spacing: -0.02em; }
+    @media (min-width: 768px) { .hero h1 { font-size: 9rem; } }
+    .hero h1 em { font-style: italic; font-weight: 400; }
+    .hero p { font-family: 'Fraunces', serif; font-style: italic; color: var(--smoke); font-size: 1.25rem; margin-top: 1.5rem; max-width: 36rem; }
+    @media (min-width: 768px) { .hero p { font-size: 1.5rem; } }
+
+    .panel { border: 1px solid var(--ink); }
+
+    /* API key panel */
+    .key-panel { padding: 1.25rem 1.5rem; }
+    .key-label { display: block; margin-bottom: 0.6rem; }
+    .key-input-wrap { display: flex; align-items: stretch; border: 1px solid var(--ink); width: 100%; }
+    .key-input { flex: 1; min-width: 0; padding: 0.7rem 0.9rem; border: none; background: transparent; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--ink); outline: none; }
+    .key-input::placeholder { color: var(--smoke); }
+    .reveal-btn { padding: 0.7rem 0.9rem; background: transparent; border: none; border-left: 1px solid var(--ink); font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--ink); cursor: pointer; white-space: nowrap; }
+    .reveal-btn:hover { background: var(--ink); color: var(--cream); }
+    .key-actions { display: flex; gap: 0.6rem; margin-top: 0.75rem; align-items: center; flex-wrap: wrap; }
+    .key-saved-line { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 0.9rem; border: 1px solid var(--ink); width: 100%; }
+    .check { color: var(--ok); font-weight: 600; }
+    .key-preview { flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--ink); }
+    .key-help { font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.5; color: var(--smoke); margin-top: 0.75rem; text-transform: none; letter-spacing: 0; }
+    .err-inline { color: var(--rust); font-family: 'JetBrains Mono', monospace; font-size: 12px; text-transform: none; letter-spacing: 0; }
+
+    /* Dropzone — label wraps a transparent file input overlay. */
+    .dropzone { position: relative; display: block; border: 1px solid var(--ink); cursor: pointer; transition: background 0.2s, color 0.2s; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
+    .dropzone.drag-over { background: var(--ink); color: var(--cream); }
+    .dropzone.drag-over .mono-sm { color: var(--cream); }
+    .dz-input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 2; font-size: 16px; pointer-events: auto; }
+    .dz-visual { padding: 4.5rem 1.5rem; text-align: center; pointer-events: none; position: relative; z-index: 1; }
+    .dz-visual h2 { font-family: 'Fraunces', serif; font-weight: 300; font-size: 1.75rem; }
+    @media (min-width: 768px) { .dz-visual { padding: 7rem 2rem; } .dz-visual h2 { font-size: 3rem; } }
+
+    .file-row { display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--ink-dim); }
+    @media (min-width: 768px) { .file-row { flex-direction: row; align-items: center; justify-content: space-between; } }
+    .file-name { font-family: 'Fraunces', serif; font-size: 1.25rem; font-weight: 400; }
+    @media (min-width: 768px) { .file-name { font-size: 1.5rem; } }
+    .file-meta { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--smoke); margin-top: 0.25rem; }
+
+    .btn { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em; padding: 0.6rem 1rem; cursor: pointer; transition: background 0.15s, color 0.15s, opacity 0.15s; border: 1px solid var(--ink); background: transparent; color: var(--ink); }
+    .btn:hover:not(:disabled) { background: var(--ink); color: var(--cream); }
+    .btn.primary { background: var(--ink); color: var(--cream); }
+    .btn.primary:hover:not(:disabled) { background: var(--rust); border-color: var(--rust); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-row { display: flex; gap: 0.75rem; flex-shrink: 0; }
+
+    .status-row { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--ink-dim); }
+    .status-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
+    .status-head-l { display: flex; align-items: center; gap: 0.75rem; }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
+    .dot.active { background: var(--rust); animation: pulse 1.2s ease-in-out infinite; }
+    .dot.done { background: var(--ink); }
+    .dot.error { background: var(--rust); }
+    @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.85); } }
+
+    .progress-bar { height: 1px; background: var(--ink-faint); position: relative; }
+    .progress-fill { position: absolute; inset: 0; right: auto; background: var(--ink); transition: width 0.3s; width: 0%; }
+
+    .status-note { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--smoke); margin-top: 0.5rem; }
+    .error-msg { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--rust); margin-top: 0.75rem; line-height: 1.5; word-break: break-word; }
+
+    .tx-head { display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 1.5rem; border-bottom: 1px solid var(--ink-dim); gap: 0.5rem; }
+    .tx-actions { display: flex; gap: 0.5rem; }
+    .tx-body { padding: 2rem 1.5rem; max-height: 60vh; overflow-y: auto; }
+    @media (min-width: 768px) { .tx-body { padding: 3rem 2.5rem; } }
+    .tx-body p { font-family: 'Fraunces', serif; font-weight: 300; font-size: 1.125rem; line-height: 1.7; white-space: pre-wrap; }
+    @media (min-width: 768px) { .tx-body p { font-size: 1.25rem; } }
+
+    footer { display: flex; align-items: center; justify-content: space-between; margin-top: 5rem; padding-top: 1.5rem; border-top: 1px solid var(--ink); gap: 0.75rem; flex-wrap: wrap; }
+
+    .fade-up { animation: fade-up 0.5s ease-out forwards; }
+    @keyframes fade-up { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="container">
+      <header>
+        <div class="mono">№ 001 — Audio &mdash;&gt; Text</div>
+        <div class="mono">Server-side ffmpeg · OpenAI Whisper</div>
+      </header>
+
+      <section class="hero">
+        <h1>Trans<em>cribe</em>.</h1>
+        <p>Any file, any size, any format. The server handles compression and silence-aware splitting. You get the words back.</p>
+      </section>
+
+      <!-- API key panel -->
+      <div class="panel" style="margin-bottom: 1.5rem;">
+        <div class="key-panel">
+          <div class="key-label mono-sm" style="color: var(--ink);">OpenAI API Key</div>
+
+          <div id="key-edit-mode">
+            <div class="key-input-wrap">
+              <input id="api-key" class="key-input" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false" autocapitalize="off">
+              <button id="reveal" class="reveal-btn" type="button">Show</button>
+            </div>
+            <div class="key-actions">
+              <button id="save-key" class="btn primary">Save Key</button>
+              <div id="key-error" class="err-inline hidden"></div>
+            </div>
+          </div>
+
+          <div id="key-saved-mode" class="hidden">
+            <div class="key-saved-line">
+              <span class="check">✓</span>
+              <span class="key-preview" id="key-preview"></span>
+              <button id="clear-key" class="reveal-btn" type="button" style="border-left: 1px solid var(--ink);">Change</button>
+            </div>
+          </div>
+
+          <div class="key-help">
+            Your key is saved in this browser only — it travels to our server just long enough to call OpenAI on your behalf, then is wiped from memory. Get one at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener" style="color: var(--ink);">platform.openai.com/api-keys</a>.
+          </div>
+        </div>
+      </div>
+
+      <!-- Dropzone -->
+      <label id="dropzone" class="dropzone">
+        <input id="file-input" class="dz-input" type="file" accept="audio/*,video/*" aria-label="Choose audio file">
+        <div class="dz-visual">
+          <div class="mono-sm" style="margin-bottom: 1.25rem;">[ Tap or drop file ]</div>
+          <h2>Select an audio file</h2>
+          <div class="mono-sm" style="margin-top: 1.5rem; opacity: 0.6;">any audio or video · processed server-side</div>
+        </div>
+      </label>
+
+      <!-- File panel -->
+      <div id="file-panel" class="panel hidden fade-up" style="margin-top: 1.5rem;">
+        <div class="file-row">
+          <div style="min-width: 0; flex: 1;">
+            <div class="mono-sm" style="margin-bottom: 0.25rem;">File</div>
+            <div id="file-name" class="file-name" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
+            <div id="file-meta" class="file-meta"></div>
+          </div>
+          <div class="btn-row">
+            <button id="change-btn" class="btn">Change</button>
+            <button id="run-btn" class="btn primary">Transcribe</button>
+          </div>
+        </div>
+
+        <div id="status-block" class="status-row hidden">
+          <div class="status-head">
+            <div class="status-head-l">
+              <span id="status-dot" class="dot"></span>
+              <span id="status-label" class="mono-sm" style="color: var(--ink);"></span>
+            </div>
+            <span id="status-elapsed" class="mono-sm"></span>
+          </div>
+          <div id="progress-wrap" class="progress-bar hidden">
+            <div id="progress-fill" class="progress-fill"></div>
+          </div>
+          <div id="status-note" class="status-note hidden"></div>
+          <div id="error-msg" class="error-msg hidden"></div>
+        </div>
+
+        <div id="transcript-block" class="hidden">
+          <div class="tx-head">
+            <div class="mono-sm" id="word-count"></div>
+            <div class="tx-actions">
+              <button id="copy-btn" class="btn">Copy</button>
+              <button id="download-btn" class="btn">.txt</button>
+            </div>
+          </div>
+          <div class="tx-body">
+            <p id="transcript-text"></p>
+          </div>
+        </div>
+      </div>
+
+      <footer>
+        <div class="mono">Server ffmpeg · silence-aware chunks · Whisper</div>
+        <div class="mono">No persistence · auto-deletes</div>
+      </footer>
+    </div>
+  </main>
+
+  <script>
+    // ============== State ==============
+    const KEY_STORAGE = 'openai_api_key';
+    const state = {
+      apiKey: '',
+      file: null,
+      jobId: null,
+      stage: 'idle',
+      uploadProgress: 0,
+      serverProgress: 0,
+      message: '',
+      chunkInfo: { current: 0, total: 0, usedSilence: 0 },
+      transcript: '',
+      duration: null,
+      error: '',
+      elapsed: 0,
+    };
+
+    let timerHandle = null;
+    let elapsedStart = 0;
+    let pollHandle = null;
+
+    const $ = (id) => document.getElementById(id);
+
+    function fmtBytes(b) {
+      if (b < 1024) return b + ' B';
+      if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+      if (b < 1073741824) return (b / 1048576).toFixed(2) + ' MB';
+      return (b / 1073741824).toFixed(2) + ' GB';
+    }
+    function fmtTime(s) {
+      if (s == null || !isFinite(s)) return '';
+      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
+      const mm = String(m).padStart(2, '0'), ss = String(sec).padStart(2, '0');
+      return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+    }
+
+    function startTimer() {
+      elapsedStart = Date.now(); state.elapsed = 0;
+      timerHandle = setInterval(() => {
+        state.elapsed = (Date.now() - elapsedStart) / 1000;
+        $('status-elapsed').textContent = fmtTime(state.elapsed);
+      }, 250);
+    }
+    function stopTimer() { if (timerHandle) clearInterval(timerHandle); timerHandle = null; }
+
+    // ============== Upload (XHR for progress) ==============
+    function uploadFile(file, apiKey, onProgress) {
+      return new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.upload.onprogress = (e) => {
+          if (e.lengthComputable) onProgress(e.loaded / e.total);
+        };
+        xhr.onload = () => {
+          if (xhr.status >= 200 && xhr.status < 300) {
+            try { resolve(JSON.parse(xhr.responseText)); }
+            catch { reject(new Error('Server returned invalid response.')); }
+          } else {
+            let msg = `Upload failed (${xhr.status}).`;
+            try { const j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch {}
+            reject(new Error(msg));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Network error during upload.'));
+        const form = new FormData();
+        form.append('file', file);
+        xhr.open('POST', '/api/transcribe');
+        xhr.setRequestHeader('Authorization', 'Bearer ' + apiKey);
+        xhr.send(form);
+      });
+    }
+
+    // ============== Poll job status ==============
+    async function pollJob(jobId, onUpdate) {
+      while (true) {
+        let res, data;
+        try {
+          res = await fetch(`/api/jobs/${jobId}`);
+        } catch (e) {
+          throw new Error('Lost connection to server.');
+        }
+        if (!res.ok) throw new Error('Job not found (server may have restarted).');
+        data = await res.json();
+        onUpdate(data);
+        if (data.status === 'done' || data.status === 'error') return data;
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+
+    // ============== Run ==============
+    async function run() {
+      if (!state.file) return;
+      if (!state.apiKey) {
+        state.error = 'Save your OpenAI API key first.';
+        state.stage = 'error'; render(); return;
+      }
+      state.error = ''; state.transcript = '';
+      state.uploadProgress = 0; state.serverProgress = 0;
+      state.message = 'Uploading'; state.stage = 'uploading';
+      state.chunkInfo = { current: 0, total: 0, usedSilence: 0 };
+      startTimer(); render();
+
+      try {
+        const { jobId } = await uploadFile(state.file, state.apiKey, (p) => {
+          state.uploadProgress = p; render();
+        });
+        state.jobId = jobId;
+        state.message = 'Queued on server';
+        state.stage = 'server-stage';
+        render();
+
+        const final = await pollJob(jobId, (job) => {
+          state.stage = job.stage || 'server-stage';
+          state.message = job.message || '';
+          state.serverProgress = job.progress || 0;
+          state.chunkInfo = job.chunkInfo || state.chunkInfo;
+          state.duration = job.duration;
+          if (job.transcript) state.transcript = job.transcript;
+          if (job.error) state.error = job.error;
+          render();
+        });
+
+        if (final.status === 'error') throw new Error(final.error || 'Server reported an error.');
+
+        state.stage = 'done';
+        state.message = 'Complete';
+        state.transcript = final.transcript || state.transcript;
+        render();
+      } catch (e) {
+        state.error = e.message || 'Something went wrong.';
+        state.stage = 'error'; render();
+      } finally { stopTimer(); }
+    }
+
+    // ============== Render ==============
+    function render() {
+      $('dropzone').classList.toggle('hidden', !!state.file);
+      $('file-panel').classList.toggle('hidden', !state.file);
+
+      if (state.file) {
+        $('file-name').textContent = state.file.name;
+        const parts = [fmtBytes(state.file.size)];
+        if (state.duration != null) parts.push('· ' + fmtTime(state.duration) + ' of audio');
+        $('file-meta').textContent = parts.join(' ');
+
+        const busy = ['uploading','server-stage'].includes(state.stage);
+        $('run-btn').disabled = busy || !state.apiKey;
+        $('change-btn').disabled = busy;
+        $('run-btn').textContent = busy ? 'Working...' : (state.apiKey ? 'Transcribe' : 'Add key first');
+      }
+
+      const showStatus = state.stage !== 'idle';
+      $('status-block').classList.toggle('hidden', !showStatus);
+
+      if (showStatus) {
+        const dot = $('status-dot');
+        dot.className = 'dot';
+        if (['uploading','server-stage'].includes(state.stage)) dot.classList.add('active');
+        else if (state.stage === 'done') dot.classList.add('done');
+        else if (state.stage === 'error') dot.classList.add('error');
+
+        let label = state.message || '';
+        if (state.stage === 'uploading') {
+          label = `Uploading · ${Math.round(state.uploadProgress * 100)}%`;
+        }
+        $('status-label').textContent = label;
+
+        const showBar = ['uploading','server-stage'].includes(state.stage);
+        $('progress-wrap').classList.toggle('hidden', !showBar);
+        let pct = 0;
+        if (state.stage === 'uploading') pct = state.uploadProgress * 100;
+        else if (state.stage === 'server-stage') pct = state.serverProgress * 100;
+        $('progress-fill').style.width = pct + '%';
+
+        const showNote = state.chunkInfo.total > 1 && state.stage === 'server-stage';
+        $('status-note').classList.toggle('hidden', !showNote);
+        if (showNote) {
+          $('status-note').textContent = `${state.chunkInfo.usedSilence} of ${state.chunkInfo.total - 1} cuts aligned to silence`;
+        }
+
+        $('error-msg').classList.toggle('hidden', !state.error);
+        $('error-msg').textContent = state.error;
+      }
+
+      const showTx = !!state.transcript;
+      $('transcript-block').classList.toggle('hidden', !showTx);
+      if (showTx) {
+        const words = state.transcript.split(/\s+/).filter(Boolean).length;
+        $('word-count').textContent = `Transcript · ${words} words`;
+        $('transcript-text').textContent = state.transcript;
+      }
+    }
+
+    // ============== API key wiring ==============
+    function maskKey(k) { return 'sk-···' + k.slice(-4); }
+
+    function showKeyError(msg) {
+      const el = $('key-error');
+      el.textContent = msg; el.classList.remove('hidden');
+      setTimeout(() => el.classList.add('hidden'), 4000);
+    }
+
+    function showSavedKey(key) {
+      $('key-preview').textContent = maskKey(key);
+      $('key-edit-mode').classList.add('hidden');
+      $('key-saved-mode').classList.remove('hidden');
+    }
+    function showEditKey() {
+      $('key-edit-mode').classList.remove('hidden');
+      $('key-saved-mode').classList.add('hidden');
+    }
+
+    $('reveal').addEventListener('click', () => {
+      const el = $('api-key');
+      const showing = el.type === 'text';
+      el.type = showing ? 'password' : 'text';
+      $('reveal').textContent = showing ? 'Show' : 'Hide';
+    });
+
+    $('save-key').addEventListener('click', () => {
+      const v = $('api-key').value.trim();
+      if (!v) { showKeyError('Paste your key first.'); return; }
+      if (!v.startsWith('sk-')) { showKeyError('Key should start with sk-'); return; }
+      if (v.length < 20) { showKeyError('Key looks too short.'); return; }
+      try { localStorage.setItem(KEY_STORAGE, v); } catch {}
+      state.apiKey = v;
+      showSavedKey(v);
+      render();
+    });
+
+    $('clear-key').addEventListener('click', () => {
+      try { localStorage.removeItem(KEY_STORAGE); } catch {}
+      state.apiKey = '';
+      $('api-key').value = '';
+      $('api-key').type = 'password';
+      $('reveal').textContent = 'Show';
+      showEditKey();
+      render();
+    });
+
+    $('api-key').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); $('save-key').click(); }
+    });
+
+    // Restore saved key on load
+    try {
+      const saved = localStorage.getItem(KEY_STORAGE);
+      if (saved) { state.apiKey = saved; showSavedKey(saved); }
+    } catch {}
+
+    // ============== File wiring ==============
+    const dz = $('dropzone'), fileInput = $('file-input');
+    let dragCounter = 0;
+    dz.addEventListener('dragenter', (e) => { e.preventDefault(); dragCounter++; dz.classList.add('drag-over'); });
+    dz.addEventListener('dragleave', (e) => { e.preventDefault(); dragCounter--; if (dragCounter <= 0) dz.classList.remove('drag-over'); });
+    dz.addEventListener('dragover', (e) => e.preventDefault());
+    dz.addEventListener('drop', (e) => {
+      e.preventDefault(); dragCounter = 0; dz.classList.remove('drag-over');
+      handleFile(e.dataTransfer.files?.[0]);
+    });
+    fileInput.addEventListener('change', (e) => handleFile(e.target.files?.[0]));
+
+    function handleFile(f) {
+      if (!f) return;
+      state.file = f; state.duration = null;
+      state.stage = 'idle'; state.error = ''; state.transcript = '';
+      state.uploadProgress = 0; state.serverProgress = 0;
+      state.chunkInfo = { current: 0, total: 0, usedSilence: 0 };
+      state.elapsed = 0;
+      render();
+    }
+
+    $('change-btn').addEventListener('click', () => {
+      state.file = null; state.duration = null; state.stage = 'idle';
+      state.transcript = ''; state.error = '';
+      fileInput.value = '';
+      render();
+    });
+
+    $('run-btn').addEventListener('click', run);
+
+    $('copy-btn').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(state.transcript); } catch {}
+      const b = $('copy-btn'); const old = b.textContent;
+      b.textContent = 'Copied'; setTimeout(() => { b.textContent = old; }, 1500);
+    });
+    $('download-btn').addEventListener('click', () => {
+      const blob = new Blob([state.transcript], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = (state.file?.name || 'transcript').replace(/\.[^.]+$/, '') + '.txt';
+      a.click();
+      URL.revokeObjectURL(url);
+    });
+
+    render();
+  </script>
+</body>
+</html>
