@@ -5,12 +5,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Transcribe</title>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Fonts loaded from system stacks below — no third-party requests. -->
 
   <style>
+    /* System font stacks — keep everything in-browser, no Google Fonts call. */
     :root {
+      --font-serif: 'Iowan Old Style', 'Charter', 'Sitka Text', Cambria, Georgia, serif;
+      --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
       --cream: #F5F1EA;
       --paper: #EFEAE0;
       --ink: #0F0E0D;
@@ -26,7 +29,7 @@
     html, body {
       background: var(--cream);
       color: var(--ink);
-      font-family: 'Instrument Sans', system-ui, sans-serif;
+      font-family: var(--font-sans);
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
       min-height: 100vh;
@@ -37,17 +40,17 @@
     @media (min-width: 768px) { main { padding: 2rem 3rem; } }
     .container { max-width: 64rem; margin: 0 auto; }
 
-    .mono    { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--smoke); }
-    .mono-sm { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.3em; color: var(--smoke); }
-    .mono-body { font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.6; color: var(--smoke); text-transform: none; letter-spacing: 0; }
+    .mono    { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--smoke); }
+    .mono-sm { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.3em; color: var(--smoke); }
+    .mono-body { font-family: var(--font-mono); font-size: 12px; line-height: 1.6; color: var(--smoke); text-transform: none; letter-spacing: 0; }
 
     header { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1px solid var(--ink); padding-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap; }
 
     .hero { padding: 0.5rem 0 1.25rem; }
     @media (min-width: 768px) { .hero { padding: 0.75rem 0 1.5rem; } }
-    .hero h1 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 2.75rem; line-height: 1; letter-spacing: -0.02em; }
+    .hero h1 { font-family: var(--font-serif); font-weight: 400; font-size: 2.75rem; line-height: 1; letter-spacing: -0.02em; }
     @media (min-width: 768px) { .hero h1 { font-size: 4.5rem; } }
-    .hero p { font-family: 'Instrument Sans', system-ui, sans-serif; color: var(--smoke); font-size: 0.95rem; line-height: 1.45; margin-top: 0.6rem; max-width: 36rem; }
+    .hero p { font-family: var(--font-sans); color: var(--smoke); font-size: 0.95rem; line-height: 1.45; margin-top: 0.6rem; max-width: 36rem; }
     @media (min-width: 768px) { .hero p { font-size: 1.05rem; margin-top: 0.75rem; } }
 
     .panel { border: 1px solid var(--ink); }
@@ -65,25 +68,25 @@
     .server-badge .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
     .server-badge.shared .dot { background: var(--smoke); }
     .server-badge.own    .dot { background: var(--ok); }
-    .server-badge .label { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--ink); }
-    .server-badge .sub   { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--smoke); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .server-badge .change-link { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--ink); cursor: pointer; background: none; border: none; padding: 0.25rem 0.5rem; text-decoration: underline; text-underline-offset: 3px; }
+    .server-badge .label { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--ink); }
+    .server-badge .sub   { font-family: var(--font-mono); font-size: 10px; color: var(--smoke); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .server-badge .change-link { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--ink); cursor: pointer; background: none; border: none; padding: 0.25rem 0.5rem; text-decoration: underline; text-underline-offset: 3px; }
     .server-badge .change-link:hover { color: var(--rust); }
 
     /* API key panel */
     .key-panel { padding: 1rem 1.25rem; }
     .key-label { display: block; margin-bottom: 0.6rem; }
     .key-input-wrap { display: flex; align-items: stretch; border: 1px solid var(--ink); width: 100%; }
-    .key-input { flex: 1; min-width: 0; padding: 0.7rem 0.9rem; border: none; background: transparent; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--ink); outline: none; }
+    .key-input { flex: 1; min-width: 0; padding: 0.7rem 0.9rem; border: none; background: transparent; font-family: var(--font-mono); font-size: 13px; color: var(--ink); outline: none; }
     .key-input::placeholder { color: var(--smoke); }
-    .reveal-btn { padding: 0.7rem 0.9rem; background: transparent; border: none; border-left: 1px solid var(--ink); font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--ink); cursor: pointer; white-space: nowrap; }
+    .reveal-btn { padding: 0.7rem 0.9rem; background: transparent; border: none; border-left: 1px solid var(--ink); font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--ink); cursor: pointer; white-space: nowrap; }
     .reveal-btn:hover { background: var(--ink); color: var(--cream); }
     .key-actions { display: flex; gap: 0.6rem; margin-top: 0.75rem; align-items: center; flex-wrap: wrap; }
     .key-saved-line { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 0.9rem; border: 1px solid var(--ink); width: 100%; }
     .check { color: var(--ok); font-weight: 600; }
-    .key-preview { flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 13px; color: var(--ink); }
-    .key-help { font-family: 'JetBrains Mono', monospace; font-size: 12px; line-height: 1.5; color: var(--smoke); margin-top: 0.75rem; text-transform: none; letter-spacing: 0; }
-    .err-inline { color: var(--rust); font-family: 'JetBrains Mono', monospace; font-size: 12px; text-transform: none; letter-spacing: 0; }
+    .key-preview { flex: 1; font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
+    .key-help { font-family: var(--font-mono); font-size: 12px; line-height: 1.5; color: var(--smoke); margin-top: 0.75rem; text-transform: none; letter-spacing: 0; }
+    .err-inline { color: var(--rust); font-family: var(--font-mono); font-size: 12px; text-transform: none; letter-spacing: 0; }
 
     /* Dropzone */
     .dropzone { position: relative; display: block; border: 1px solid var(--ink); cursor: pointer; transition: background 0.2s, color 0.2s; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
@@ -91,16 +94,16 @@
     .dropzone.drag-over .mono-sm { color: var(--cream); }
     .dz-input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 2; font-size: 16px; pointer-events: auto; }
     .dz-visual { padding: 2.5rem 1.25rem; text-align: center; pointer-events: none; position: relative; z-index: 1; }
-    .dz-visual h2 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 1.5rem; }
+    .dz-visual h2 { font-family: var(--font-serif); font-weight: 400; font-size: 1.5rem; }
     @media (min-width: 768px) { .dz-visual { padding: 3.5rem 2rem; } .dz-visual h2 { font-size: 2.25rem; } }
 
     .file-row { display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--ink-dim); }
     @media (min-width: 768px) { .file-row { flex-direction: row; align-items: center; justify-content: space-between; } }
-    .file-name { font-family: 'Fraunces', serif; font-size: 1.25rem; font-weight: 400; }
+    .file-name { font-family: var(--font-serif); font-size: 1.25rem; font-weight: 400; }
     @media (min-width: 768px) { .file-name { font-size: 1.5rem; } }
-    .file-meta { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--smoke); margin-top: 0.25rem; }
+    .file-meta { font-family: var(--font-mono); font-size: 12px; color: var(--smoke); margin-top: 0.25rem; }
 
-    .btn { font-family: 'JetBrains Mono', monospace; font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em; padding: 0.6rem 1rem; cursor: pointer; transition: background 0.15s, color 0.15s, opacity 0.15s; border: 1px solid var(--ink); background: transparent; color: var(--ink); }
+    .btn { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em; padding: 0.6rem 1rem; cursor: pointer; transition: background 0.15s, color 0.15s, opacity 0.15s; border: 1px solid var(--ink); background: transparent; color: var(--ink); }
     .btn:hover:not(:disabled) { background: var(--ink); color: var(--cream); }
     .btn.primary { background: var(--ink); color: var(--cream); }
     .btn.primary:hover:not(:disabled) { background: var(--rust); border-color: var(--rust); }
@@ -114,7 +117,7 @@
       background: var(--ink-fainter);
     }
     .path-picker-head {
-      font-family: 'Fraunces', serif;
+      font-family: var(--font-serif);
       font-size: 1.15rem;
       font-weight: 400;
       margin-bottom: 1.25rem;
@@ -137,16 +140,16 @@
       position: absolute;
       top: -0.55rem; right: 1rem;
       background: var(--ink); color: var(--cream);
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--font-mono);
       font-size: 9px; text-transform: uppercase; letter-spacing: 0.2em;
       padding: 0.2rem 0.5rem;
     }
     .path-card.dimmed { opacity: 0.55; }
     .path-icon { font-size: 1.4rem; margin-bottom: 0.5rem; }
-    .path-title { font-family: 'Fraunces', serif; font-size: 1.4rem; font-weight: 400; line-height: 1.1; margin-bottom: 0.35rem; }
-    .path-subtitle { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--smoke); text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 0.75rem; }
-    .path-desc { font-family: 'Fraunces', serif; font-size: 0.95rem; color: var(--ink); line-height: 1.45; flex: 1; margin-bottom: 1rem; font-style: italic; }
-    .path-eta { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--smoke); margin-bottom: 1rem; text-transform: none; letter-spacing: 0; }
+    .path-title { font-family: var(--font-serif); font-size: 1.4rem; font-weight: 400; line-height: 1.1; margin-bottom: 0.35rem; }
+    .path-subtitle { font-family: var(--font-mono); font-size: 10px; color: var(--smoke); text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 0.75rem; }
+    .path-desc { font-family: var(--font-serif); font-size: 0.95rem; color: var(--ink); line-height: 1.45; flex: 1; margin-bottom: 1rem; font-style: italic; }
+    .path-eta { font-family: var(--font-mono); font-size: 11px; color: var(--smoke); margin-bottom: 1rem; text-transform: none; letter-spacing: 0; }
     .path-eta strong { color: var(--ink); font-weight: 500; }
     .path-btn-row { margin-top: auto; }
 
@@ -162,14 +165,14 @@
     .progress-bar { height: 1px; background: var(--ink-faint); position: relative; }
     .progress-fill { position: absolute; inset: 0; right: auto; background: var(--ink); transition: width 0.3s; width: 0%; }
 
-    .status-note { font-family: 'JetBrains Mono', monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--smoke); margin-top: 0.5rem; }
-    .error-msg { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--rust); margin-top: 0.75rem; line-height: 1.5; word-break: break-word; }
+    .status-note { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--smoke); margin-top: 0.5rem; }
+    .error-msg { font-family: var(--font-mono); font-size: 12px; color: var(--rust); margin-top: 0.75rem; line-height: 1.5; word-break: break-word; }
 
     .tx-head { display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 1.5rem; border-bottom: 1px solid var(--ink-dim); gap: 0.5rem; }
     .tx-actions { display: flex; gap: 0.5rem; }
     .tx-body { padding: 2rem 1.5rem; max-height: 60vh; overflow-y: auto; }
     @media (min-width: 768px) { .tx-body { padding: 3rem 2.5rem; } }
-    .tx-body p { font-family: 'Fraunces', serif; font-weight: 300; font-size: 1.125rem; line-height: 1.7; white-space: pre-wrap; }
+    .tx-body p { font-family: var(--font-serif); font-weight: 300; font-size: 1.125rem; line-height: 1.7; white-space: pre-wrap; }
     @media (min-width: 768px) { .tx-body p { font-size: 1.25rem; } }
 
     /* ===== Modal ===== */
@@ -197,15 +200,15 @@
       padding: 1.25rem 1.75rem;
       border-bottom: 1px solid var(--ink);
     }
-    .modal-title { font-family: 'Fraunces', serif; font-size: 1.5rem; font-weight: 400; }
-    .modal-close { background: none; border: none; cursor: pointer; font-family: 'JetBrains Mono', monospace; font-size: 16px; color: var(--ink); padding: 0.25rem 0.5rem; }
+    .modal-title { font-family: var(--font-serif); font-size: 1.5rem; font-weight: 400; }
+    .modal-close { background: none; border: none; cursor: pointer; font-family: var(--font-mono); font-size: 16px; color: var(--ink); padding: 0.25rem 0.5rem; }
     .modal-close:hover { color: var(--rust); }
     .modal-body { padding: 1.75rem; }
-    .modal-body h3 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 1.15rem; margin-bottom: 0.5rem; margin-top: 1.25rem; }
+    .modal-body h3 { font-family: var(--font-serif); font-weight: 400; font-size: 1.15rem; margin-bottom: 0.5rem; margin-top: 1.25rem; }
     .modal-body h3:first-child { margin-top: 0; }
-    .modal-body p { font-family: 'Fraunces', serif; font-size: 1rem; line-height: 1.55; color: var(--ink); margin-bottom: 0.75rem; }
+    .modal-body p { font-family: var(--font-serif); font-size: 1rem; line-height: 1.55; color: var(--ink); margin-bottom: 0.75rem; }
     .modal-body ol { padding-left: 1.5rem; margin: 0.5rem 0 1rem; }
-    .modal-body ol li { font-family: 'Fraunces', serif; font-size: 1rem; line-height: 1.55; padding-left: 0.3rem; margin-bottom: 0.45rem; }
+    .modal-body ol li { font-family: var(--font-serif); font-size: 1rem; line-height: 1.55; padding-left: 0.3rem; margin-bottom: 0.45rem; }
     .modal-body strong { font-weight: 500; }
     .modal-footer {
       padding: 1.25rem 1.75rem;
@@ -223,7 +226,7 @@
       margin: 1.25rem 0;
     }
     .pairing-code-label {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--font-mono);
       font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.25em;
@@ -231,7 +234,7 @@
       margin-bottom: 0.5rem;
     }
     .pairing-code {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--font-mono);
       font-size: 2rem;
       font-weight: 500;
       letter-spacing: 0.05em;
@@ -240,7 +243,7 @@
       user-select: all;
     }
     .pairing-copy {
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--font-mono);
       font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.2em;
@@ -268,7 +271,7 @@
       flex-shrink: 0;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .waiting-text { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink); }
+    .waiting-text { font-family: var(--font-mono); font-size: 12px; color: var(--ink); }
     .waiting-text .sub { display: block; font-size: 10px; color: var(--smoke); margin-top: 0.25rem; text-transform: uppercase; letter-spacing: 0.15em; }
 
     .manual-url-section {
@@ -278,7 +281,7 @@
     }
     .manual-url-section summary {
       cursor: pointer;
-      font-family: 'JetBrains Mono', monospace;
+      font-family: var(--font-mono);
       font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.2em;
@@ -287,7 +290,7 @@
     }
     .manual-url-section summary:hover { color: var(--ink); }
     .manual-url-section .body { margin-top: 0.75rem; }
-    .manual-url-input { width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--ink); font-family: 'JetBrains Mono', monospace; font-size: 12px; background: var(--cream); margin-bottom: 0.5rem; }
+    .manual-url-input { width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--ink); font-family: var(--font-mono); font-size: 12px; background: var(--cream); margin-bottom: 0.5rem; }
 
     footer { display: none; }
 
@@ -340,7 +343,7 @@
             </div>
           </div>
           <div class="key-help">
-            Saved in this browser only. Wiped from server memory after each request. Get a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys</a>.
+            Saved in this browser only. Wiped from server memory after each request. <strong>Note:</strong> OpenAI keeps audio you transcribe for 30 days per their policy. Get a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys</a>.
           </div>
         </div>
       </div>
@@ -451,7 +454,7 @@
 
         <h3>What will happen</h3>
         <ol>
-          <li>We'll give you a short code, like <code style="font-family: 'JetBrains Mono', monospace;">purple-falcon</code>. <strong>Keep this tab open.</strong></li>
+          <li>We'll give you a short code, like <code style="font-family: var(--font-mono);">purple-falcon</code>. <strong>Keep this tab open.</strong></li>
           <li>You'll click a button. Render opens in a new tab.</li>
           <li>You sign in to Render, then paste the code into the one field it asks for.</li>
           <li>Click "Create" in Render. Walk away for 3&ndash;5 minutes while Render builds your server.</li>
@@ -472,7 +475,7 @@
           <button id="pairing-copy-btn" class="pairing-copy" type="button">Copy code</button>
         </div>
 
-        <p style="font-size: 0.95rem;"><strong>Now:</strong> click the button below to open Render in a new tab. Sign in if needed, then look for the field labeled <code style="font-family: 'JetBrains Mono', monospace; font-size: 0.9rem;">PAIRING_CODE</code> and paste your code there. Click "Apply" and "Create Web Service".</p>
+        <p style="font-size: 0.95rem;"><strong>Now:</strong> click the button below to open Render in a new tab. Sign in if needed, then look for the field labeled <code style="font-family: var(--font-mono); font-size: 0.9rem;">PAIRING_CODE</code> and paste your code there. Click "Apply" and "Create Web Service".</p>
 
         <p style="font-size: 0.95rem;"><strong>After clicking Create:</strong> come back to this tab. We'll watch for your server and connect automatically when it's ready (about 3&ndash;5 minutes).</p>
 
@@ -481,6 +484,18 @@
           <div class="waiting-text">
             <span id="waiting-main">Waiting for your server to come online&hellip;</span>
             <span class="sub" id="waiting-sub">Usually 3&ndash;5 minutes after you click Create in Render</span>
+          </div>
+        </div>
+
+        <div id="confirm-box" class="hidden" style="border: 1px solid var(--ok); background: rgba(45, 106, 79, 0.06); padding: 1.25rem; margin-top: 1rem;">
+          <div style="font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--ok); margin-bottom: 0.75rem;">✓ A server appeared with your code</div>
+          <div style="font-family: var(--font-serif); font-size: 1.05rem; margin-bottom: 0.4rem;">Confirm this is your server:</div>
+          <div style="font-family: var(--font-mono); font-size: 13px; word-break: break-all; padding: 0.6rem 0.8rem; background: var(--cream); border: 1px solid var(--ink-dim); margin-bottom: 0.5rem;" id="confirm-url-full"></div>
+          <div style="font-family: var(--font-mono); font-size: 10px; color: var(--smoke); text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 1rem;">Host: <span id="confirm-url-host"></span></div>
+          <div style="font-family: var(--font-serif); font-size: 0.9rem; color: var(--smoke); margin-bottom: 1rem; line-height: 1.4;"><strong style="color: var(--ink);">Only confirm if you just deployed this.</strong> If the URL looks unfamiliar, cancel and start over with a new code.</div>
+          <div style="display: flex; gap: 0.5rem;">
+            <button id="confirm-server-btn" class="btn primary" style="flex: 1;">Yes, this is mine</button>
+            <button id="confirm-cancel-btn" class="btn" style="flex: 1;">Cancel</button>
           </div>
         </div>
 
@@ -499,7 +514,7 @@
         <div style="text-align: center; padding: 1rem 0;">
           <div style="font-size: 3rem; margin-bottom: 0.5rem;">✓</div>
           <h3 style="text-align: center; margin-bottom: 0.5rem;">You're connected!</h3>
-          <p style="font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--smoke); word-break: break-all;" id="connected-url"></p>
+          <p style="font-family: var(--font-mono); font-size: 12px; color: var(--smoke); word-break: break-all;" id="connected-url"></p>
           <p style="margin-top: 1.25rem;">Your file will now be transcribed using your private server. From now on, every transcription on this page will use your server until you change it back in the badge at the top.</p>
         </div>
       </div>
@@ -530,12 +545,12 @@
 
         <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem;">
           <button id="use-shared-btn" class="btn" style="width: 100%; padding: 1rem; text-align: left;">
-            <div style="font-family: 'Fraunces', serif; font-size: 1.1rem; text-transform: none; letter-spacing: 0; font-weight: 400;">Shared free server</div>
-            <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--smoke); text-transform: uppercase; letter-spacing: 0.15em; margin-top: 0.25rem;">Default · slow for large files</div>
+            <div style="font-family: var(--font-serif); font-size: 1.1rem; text-transform: none; letter-spacing: 0; font-weight: 400;">Shared free server</div>
+            <div style="font-family: var(--font-mono); font-size: 10px; color: var(--smoke); text-transform: uppercase; letter-spacing: 0.15em; margin-top: 0.25rem;">Default · slow for large files</div>
           </button>
           <button id="use-own-btn" class="btn" style="width: 100%; padding: 1rem; text-align: left;">
-            <div style="font-family: 'Fraunces', serif; font-size: 1.1rem; text-transform: none; letter-spacing: 0; font-weight: 400;">My own server</div>
-            <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: var(--smoke); text-transform: uppercase; letter-spacing: 0.15em; margin-top: 0.25rem;" id="own-server-sub">Set up takes ~5 min · faster after</div>
+            <div style="font-family: var(--font-serif); font-size: 1.1rem; text-transform: none; letter-spacing: 0; font-weight: 400;">My own server</div>
+            <div style="font-family: var(--font-mono); font-size: 10px; color: var(--smoke); text-transform: uppercase; letter-spacing: 0.15em; margin-top: 0.25rem;" id="own-server-sub">Set up takes ~5 min · faster after</div>
           </button>
         </div>
       </div>
@@ -609,7 +624,19 @@
     function generatePairingCode() {
       const a = PAIR_ADJ[Math.floor(Math.random() * PAIR_ADJ.length)];
       const b = PAIR_NOUN[Math.floor(Math.random() * PAIR_NOUN.length)];
-      return `${a}-${b}`;
+      // 6 chars from an unambiguous alphabet → 32^6 ≈ 1 billion combinations.
+      // Combined with the word pair (~576) → ~600 billion total. Brute-forcing
+      // by pre-registering all codes is infeasible.
+      const alphabet = 'abcdefghijkmnpqrstuvwxyz23456789'; // no 0/o/1/l/i
+      let suffix = '';
+      const rand = crypto.getRandomValues
+        ? crypto.getRandomValues(new Uint8Array(6))
+        : null;
+      for (let i = 0; i < 6; i++) {
+        const idx = rand ? rand[i] % alphabet.length : Math.floor(Math.random() * alphabet.length);
+        suffix += alphabet[idx];
+      }
+      return `${a}-${b}-${suffix}`;
     }
 
     function startTimer() {
@@ -850,16 +877,21 @@
       state.pairing.polling = true;
       $('waiting-box').classList.remove('hidden', 'connected');
       $('waiting-main').textContent = 'Waiting for your server to come online…';
+      $('confirm-box').classList.add('hidden');
 
       const tick = async () => {
         if (!state.pairing.polling) return;
         try {
-          // Always look up against this origin (the central registry)
           const res = await fetch(`${window.location.origin}/api/pair/lookup/${encodeURIComponent(code)}`);
           if (res.ok) {
             const data = await res.json();
             if (data && data.url) {
-              connectToServer(data.url);
+              // Found a server — but DO NOT auto-connect. Stop polling,
+              // show the URL, and require an explicit confirmation click.
+              // This prevents an attacker who somehow registered a malicious
+              // URL for this code from silently MITMing the user.
+              stopPairingPoll();
+              showConfirmStep(data.url);
               return;
             }
           }
@@ -867,6 +899,18 @@
         state.pairing.pollHandle = setTimeout(tick, 2500);
       };
       tick();
+    }
+
+    function showConfirmStep(url) {
+      $('waiting-box').classList.add('hidden');
+      $('confirm-box').classList.remove('hidden');
+      try {
+        $('confirm-url-host').textContent = new URL(url).host;
+      } catch {
+        $('confirm-url-host').textContent = url;
+      }
+      $('confirm-url-full').textContent = url;
+      $('confirm-box').dataset.url = url;
     }
 
     function stopPairingPoll() {
@@ -1084,6 +1128,27 @@
       b.textContent = 'Copied ✓'; setTimeout(() => { b.textContent = old; }, 1500);
     });
 
+    $('confirm-server-btn').addEventListener('click', async () => {
+      const url = $('confirm-box').dataset.url;
+      if (!url) return;
+      await connectToServer(url);
+    });
+
+    $('confirm-cancel-btn').addEventListener('click', () => {
+      // Reject this URL and start polling again with a fresh code
+      $('confirm-box').classList.add('hidden');
+      $('waiting-box').classList.remove('hidden');
+      $('waiting-main').textContent = 'Cancelled. Generating a new code…';
+      setTimeout(() => {
+        const newCode = generatePairingCode();
+        state.pairing.code = newCode;
+        try { localStorage.setItem(PAIRING_STORAGE, newCode); } catch {}
+        $('pairing-code-display').textContent = newCode;
+        $('waiting-main').textContent = 'Waiting for your server to come online…';
+        startPairingPoll(newCode);
+      }, 800);
+    });
+
     $('manual-url-save').addEventListener('click', async () => {
       const raw = $('manual-url-input').value.trim();
       const err = $('manual-url-error');
@@ -1138,14 +1203,16 @@
       const savedServer = localStorage.getItem(SERVER_URL_STORAGE);
       if (savedServer) { state.serverUrl = savedServer; renderServerBadge(); }
     } catch {}
-    // If a pairing was in progress and not yet completed, resume polling
+    // If a pairing was in progress, keep the code in state so the modal
+    // resumes with the same code (rather than generating a new one). We
+    // intentionally do NOT auto-start polling here — that would mean any
+    // attacker who registered against the code could trigger UI changes
+    // behind a closed modal. Polling only resumes when the user explicitly
+    // reopens the Advanced setup modal.
     try {
       const pendingPair = localStorage.getItem(PAIRING_STORAGE);
       if (pendingPair && !state.serverUrl) {
-        // Don't auto-pop the modal, but resume polling silently
         state.pairing.code = pendingPair;
-        startPairingPoll(pendingPair);
-        // Stash that we have a pending pair so the user can open the modal to see it
       }
     } catch {}
 

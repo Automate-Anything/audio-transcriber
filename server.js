@@ -9,6 +9,8 @@
 //   already-compressed files skip the re-encode but still get smart-split.
 
 const express = require('express');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
 const multer = require('multer');
 const { spawn } = require('child_process');
 const fs = require('fs');
@@ -45,6 +47,8 @@ const PAIRING_CODE        = process.env.PAIRING_CODE || '';
 const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL || '';
 const REGISTER_URL        = (process.env.REGISTER_URL || 'https://audio-transcriber-ccy7.onrender.com').replace(/\/+$/, '');
 const PAIRING_TTL_MS      = 30 * 60 * 1000;
+const MAX_PAIRINGS        = 10_000;      // memory cap
+const MIN_CODE_LENGTH     = 12;          // forces high-entropy codes (e.g. word-word-xxxxxx)
 
 // ============================================================================
 // App
@@ -52,8 +56,40 @@ const PAIRING_TTL_MS      = 30 * 60 * 1000;
 
 const app = express();
 
+// Render and similar PaaS proxies sit in front of the app — needed so rate
+// limiting sees real client IPs instead of the proxy's.
+app.set('trust proxy', 1);
+
+// Security headers via helmet. We use 'unsafe-inline' for scripts and styles
+// because the app inlines them; the bigger wins here are X-Frame-Options
+// (clickjacking), Referrer-Policy, X-Content-Type-Options, and a connect-src
+// policy that prevents data exfiltration to non-HTTPS origins.
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      "default-src": ["'self'"],
+      "script-src": ["'self'", "'unsafe-inline'"],
+      "style-src": ["'self'", "'unsafe-inline'"],
+      "img-src": ["'self'", "data:"],
+      // Permit calls back to the app's own origin + any HTTPS endpoint (BYO
+      // server feature needs this) + localhost for dev. Blocks http: outside
+      // dev so audio + keys can't be exfiltrated to insecure endpoints.
+      "connect-src": ["'self'", "https:", "http://localhost:*"],
+      "frame-ancestors": ["'none'"],
+      "base-uri": ["'self'"],
+      "form-action": ["'self'"],
+    },
+  },
+  // Render terminates TLS and adds HSTS at the proxy; doing it here can break
+  // local development.
+  strictTransportSecurity: false,
+  // X-Powered-By header is removed by helmet's hidePoweredBy (on by default).
+  crossOriginEmbedderPolicy: false, // allow audio uploads from any origin
+}));
+
 // CORS — needed so any frontend (including this app served from another origin)
-// can talk to this server when used as a "bring your own server".
+// can talk to this server when used as a "bring your own server". Helmet's
+// CSP above is the inbound protection; CORS controls outbound from the browser.
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
@@ -61,6 +97,28 @@ app.use((req, res, next) => {
   res.setHeader('Access-Control-Max-Age', '86400');
   if (req.method === 'OPTIONS') return res.status(204).end();
   next();
+});
+
+// Rate limiters — per-IP buckets keep one bad actor from monopolizing.
+// Generous defaults; real abuse will trip them, normal use won't notice.
+const pairRegisterLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 20,
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Too many requests, please slow down.' },
+});
+const pairLookupLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 120, // polling sends ~30/min so leave headroom
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'Too many lookups, please slow down.' },
+});
+const transcribeLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, max: 30, // 30 transcribe jobs per hour per IP
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'You\'ve hit the hourly transcription limit on this server.' },
+});
+const jobsLimiter = rateLimit({
+  windowMs: 60 * 1000, max: 240, // polling can be busy
+  standardHeaders: true, legacyHeaders: false,
 });
 
 app.use(express.json({ limit: '64kb' }));
@@ -80,11 +138,12 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-app.post('/api/pair/register', (req, res) => {
+app.post('/api/pair/register', pairRegisterLimiter, (req, res) => {
   const code = String((req.body && req.body.code) || '').trim().toLowerCase();
   const url  = String((req.body && req.body.url)  || '').trim();
   if (!code || !url) return res.status(400).json({ error: 'code and url required' });
   if (!/^https?:\/\//.test(url)) return res.status(400).json({ error: 'url must include scheme' });
+  if (code.length < MIN_CODE_LENGTH) return res.status(400).json({ error: 'code too short' });
   if (code.length > 64 || url.length > 256) return res.status(400).json({ error: 'too long' });
 
   // Anti-clobber: if a *different* URL claimed the same code in the last minute, reject.
@@ -92,12 +151,21 @@ app.post('/api/pair/register', (req, res) => {
   if (existing && existing.url !== url && (Date.now() - existing.timestamp) < 60_000) {
     return res.status(409).json({ error: 'code already claimed' });
   }
+
+  // Bound the map: evict oldest 10% when at cap to make room.
+  if (pairings.size >= MAX_PAIRINGS) {
+    const sorted = [...pairings.entries()].sort((a, b) => a[1].timestamp - b[1].timestamp);
+    const toEvict = Math.floor(MAX_PAIRINGS * 0.1);
+    for (let i = 0; i < toEvict; i++) pairings.delete(sorted[i][0]);
+  }
+
   pairings.set(code, { url, timestamp: Date.now() });
-  console.log(`[pair] registered ${code} -> ${url}`);
+  // Log only a truncated code so logs don't function as a pairing oracle.
+  console.log(`[pair] registered ${code.slice(0, 6)}…`);
   res.json({ ok: true });
 });
 
-app.get('/api/pair/lookup/:code', (req, res) => {
+app.get('/api/pair/lookup/:code', pairLookupLimiter, (req, res) => {
   const code = String(req.params.code || '').trim().toLowerCase();
   const p = pairings.get(code);
   if (!p || (Date.now() - p.timestamp > PAIRING_TTL_MS)) {
@@ -128,13 +196,9 @@ const upload = multer({
 
 const jobs = new Map();
 
-app.get('/health', (req, res) => res.json({
-  ok: true,
-  ffmpeg: true, // assumed (Docker installs it); the build would have failed otherwise
-  pairings: pairings.size,
-}));
+app.get('/health', (req, res) => res.json({ ok: true }));
 
-app.post('/api/transcribe', (req, res, next) => {
+app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
   upload.single('file')(req, res, (err) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
@@ -189,7 +253,7 @@ app.post('/api/transcribe', (req, res, next) => {
   res.json({ jobId });
 });
 
-app.get('/api/jobs/:id', (req, res) => {
+app.get('/api/jobs/:id', jobsLimiter, (req, res) => {
   const job = jobs.get(req.params.id);
   if (!job) return res.status(404).json({ error: 'Job not found.' });
   res.json({
@@ -330,12 +394,18 @@ function ffprobeDuration(filePath) {
     proc.stdout.on('data', d => { out += d.toString(); });
     proc.stderr.on('data', d => { err += d.toString(); });
     proc.on('close', code => {
-      if (code !== 0) return reject(new Error(`ffprobe failed: ${err.slice(0, 500)}`));
+      if (code !== 0) {
+        console.error(`[ffprobe] exit ${code}: ${err.slice(0, 500)}`);
+        return reject(new Error('Could not read audio metadata. File may be corrupted.'));
+      }
       const dur = parseFloat(out.trim());
       if (!isFinite(dur) || dur <= 0) return reject(new Error('Could not determine audio duration.'));
       resolve(dur);
     });
-    proc.on('error', e => reject(new Error(`ffprobe not available: ${e.message}`)));
+    proc.on('error', e => {
+      console.error(`[ffprobe] spawn error: ${e.message}`);
+      reject(new Error('Audio processing tool is unavailable on this server.'));
+    });
   });
 }
 
@@ -392,9 +462,15 @@ function compressAndDetectSilences(job, outputPath) {
 
     proc.on('close', code => {
       if (code === 0) { job.progress = 0.5; resolve(); }
-      else reject(new Error(`ffmpeg compress failed (${code}):\n${stderrTail}`));
+      else {
+        console.error(`[ffmpeg compress] exit ${code}:\n${stderrTail}`);
+        reject(new Error('Audio compression failed. The file may be corrupted or in an unsupported format.'));
+      }
     });
-    proc.on('error', e => reject(new Error(`ffmpeg not available: ${e.message}`)));
+    proc.on('error', e => {
+      console.error(`[ffmpeg compress] spawn error: ${e.message}`);
+      reject(new Error('Audio processing tool is unavailable on this server.'));
+    });
   });
 }
 
@@ -429,9 +505,15 @@ function detectSilencesOnly(job) {
 
     proc.on('close', code => {
       if (code === 0) { job.progress = 0.5; resolve(); }
-      else reject(new Error(`ffmpeg silence detect failed (${code}):\n${stderrTail}`));
+      else {
+        console.error(`[ffmpeg silence] exit ${code}:\n${stderrTail}`);
+        reject(new Error('Audio analysis failed. The file may be corrupted.'));
+      }
     });
-    proc.on('error', e => reject(new Error(`ffmpeg not available: ${e.message}`)));
+    proc.on('error', e => {
+      console.error(`[ffmpeg silence] spawn error: ${e.message}`);
+      reject(new Error('Audio processing tool is unavailable on this server.'));
+    });
   });
 }
 
@@ -474,17 +556,23 @@ function splitAudio(inputPath, splitPoints, workDir, srcExt) {
     let stderrTail = '';
     proc.stderr.on('data', d => { stderrTail = (stderrTail + d.toString()).slice(-2000); });
     proc.on('close', code => {
-      if (code !== 0) return reject(new Error(`ffmpeg split failed (${code}):\n${stderrTail}`));
+      if (code !== 0) {
+        console.error(`[ffmpeg split] exit ${code}:\n${stderrTail}`);
+        return reject(new Error('Audio splitting failed. The file may be malformed.'));
+      }
       const chunks = [];
       let i = 0;
       while (true) {
         const p = path.join(workDir, `chunk_${String(i).padStart(3, '0')}${ext}`);
         if (fs.existsSync(p)) { chunks.push(p); i++; } else break;
       }
-      if (chunks.length === 0) return reject(new Error('No chunks produced.'));
+      if (chunks.length === 0) return reject(new Error('No chunks were produced from the audio.'));
       resolve(chunks);
     });
-    proc.on('error', e => reject(new Error(`ffmpeg not available: ${e.message}`)));
+    proc.on('error', e => {
+      console.error(`[ffmpeg split] spawn error: ${e.message}`);
+      reject(new Error('Audio processing tool is unavailable on this server.'));
+    });
   });
 }
 
