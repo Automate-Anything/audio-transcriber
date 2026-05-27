@@ -36,6 +36,160 @@
     }
     /* paper-grain overlay removed — keep background clean */
 
+    /* ===== Top nav (mirrors automateanything.ai structure) ===== */
+    .topnav {
+      position: relative;
+      z-index: 50;
+      background: #ffffff;
+      border-bottom: 1px solid var(--ink-faint);
+    }
+    .topnav-inner {
+      max-width: 80rem;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1.25rem;
+      gap: 1rem;
+    }
+    @media (min-width: 768px) { .topnav-inner { padding: 0.85rem 2rem; } }
+
+    .topnav-logo { display: flex; align-items: center; gap: 0.6rem; text-decoration: none; color: var(--ink); }
+    .topnav-logo img { height: 28px; width: auto; display: block; }
+    .topnav-logo-text { font-family: var(--font-sans); font-weight: 600; font-size: 1.05rem; letter-spacing: -0.01em; }
+
+    .topnav-menu { display: none; align-items: center; gap: 0.25rem; }
+    @media (min-width: 980px) { .topnav-menu { display: flex; } }
+
+    .topnav-item { position: relative; }
+    .topnav-link {
+      display: inline-flex; align-items: center; gap: 0.25rem;
+      padding: 0.5rem 0.85rem;
+      font-family: var(--font-sans);
+      font-size: 0.92rem;
+      color: var(--ink);
+      text-decoration: none;
+      cursor: pointer;
+      background: none;
+      border: none;
+      border-radius: 4px;
+    }
+    .topnav-link:hover { background: rgba(0,0,0,0.04); }
+    .topnav-link .chev { font-size: 0.7rem; opacity: 0.6; }
+
+    .topnav-cta {
+      padding: 0.5rem 1.05rem;
+      font-family: var(--font-sans);
+      font-size: 0.92rem;
+      background: var(--ink);
+      color: #ffffff;
+      text-decoration: none;
+      border-radius: 999px;
+      margin-left: 0.4rem;
+    }
+    .topnav-cta:hover { background: var(--rust); }
+
+    /* Dropdown panels */
+    .topnav-dropdown {
+      position: absolute;
+      top: calc(100% + 6px);
+      left: 0;
+      min-width: 320px;
+      background: #ffffff;
+      border: 1px solid var(--ink-faint);
+      box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+      padding: 0.75rem;
+      border-radius: 6px;
+      display: none;
+    }
+    .topnav-item.open > .topnav-dropdown { display: block; }
+    .topnav-dropdown a {
+      display: block;
+      padding: 0.6rem 0.75rem;
+      text-decoration: none;
+      color: var(--ink);
+      border-radius: 4px;
+      font-family: var(--font-sans);
+    }
+    .topnav-dropdown a:hover { background: rgba(0,0,0,0.04); }
+    .topnav-dropdown a .title { display: block; font-size: 0.95rem; font-weight: 500; }
+    .topnav-dropdown a .desc { display: block; font-size: 0.8rem; color: var(--smoke); margin-top: 0.1rem; }
+    .topnav-dropdown .group-label {
+      display: block;
+      padding: 0.35rem 0.75rem 0.5rem;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: var(--smoke);
+    }
+
+    /* Hamburger (mobile) */
+    .topnav-hamburger {
+      display: inline-flex;
+      flex-direction: column;
+      justify-content: center;
+      gap: 4px;
+      width: 36px; height: 36px;
+      background: none; border: none;
+      cursor: pointer;
+      padding: 0;
+      align-items: center;
+    }
+    @media (min-width: 980px) { .topnav-hamburger { display: none; } }
+    .topnav-hamburger span { display: block; width: 18px; height: 1.5px; background: var(--ink); transition: transform 0.2s, opacity 0.2s; }
+    .topnav.open .topnav-hamburger span:nth-child(1) { transform: translateY(5.5px) rotate(45deg); }
+    .topnav.open .topnav-hamburger span:nth-child(2) { opacity: 0; }
+    .topnav.open .topnav-hamburger span:nth-child(3) { transform: translateY(-5.5px) rotate(-45deg); }
+
+    .topnav-mobile {
+      display: none;
+      border-top: 1px solid var(--ink-faint);
+      padding: 0.5rem 1rem 1rem;
+      background: #ffffff;
+    }
+    .topnav.open .topnav-mobile { display: block; }
+    @media (min-width: 980px) { .topnav-mobile { display: none !important; } }
+    .topnav-mobile details { border-bottom: 1px solid var(--ink-faint); }
+    .topnav-mobile details:last-of-type { border-bottom: none; }
+    .topnav-mobile summary {
+      padding: 0.85rem 0.5rem;
+      font-family: var(--font-sans); font-size: 0.95rem; cursor: pointer;
+      list-style: none;
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .topnav-mobile summary::-webkit-details-marker { display: none; }
+    .topnav-mobile summary::after { content: '+'; font-size: 1.1rem; color: var(--smoke); }
+    .topnav-mobile details[open] summary::after { content: '−'; }
+    .topnav-mobile .topnav-mobile-section a {
+      display: block;
+      padding: 0.55rem 1rem;
+      text-decoration: none;
+      color: var(--ink);
+      font-family: var(--font-sans);
+      font-size: 0.9rem;
+    }
+    .topnav-mobile .topnav-mobile-section a .desc { color: var(--smoke); font-size: 0.75rem; display: block; margin-top: 0.1rem; }
+    .topnav-mobile .topnav-direct {
+      display: block;
+      padding: 0.85rem 0.5rem;
+      text-decoration: none;
+      color: var(--ink);
+      font-family: var(--font-sans); font-size: 0.95rem;
+      border-bottom: 1px solid var(--ink-faint);
+    }
+    .topnav-mobile .topnav-cta-mobile {
+      display: block;
+      margin-top: 0.85rem;
+      padding: 0.7rem;
+      background: var(--ink);
+      color: #ffffff;
+      text-align: center;
+      text-decoration: none;
+      border-radius: 999px;
+      font-family: var(--font-sans); font-size: 0.95rem;
+    }
+
     main { position: relative; z-index: 10; padding: 1.5rem 1.25rem; }
     @media (min-width: 768px) { main { padding: 2rem 3rem; } }
     .container { max-width: 64rem; margin: 0 auto; }
@@ -302,6 +456,100 @@
   </style>
 </head>
 <body>
+  <nav class="topnav" id="topnav">
+    <div class="topnav-inner">
+      <a class="topnav-logo" href="https://automateanything.ai/">
+        <img src="https://automateanything.ai/images/AutomateAnything.png" alt="AutomateAnything">
+        <span class="topnav-logo-text">AutomateAnything</span>
+      </a>
+
+      <div class="topnav-menu">
+
+        <div class="topnav-item" data-dropdown>
+          <button class="topnav-link" type="button">Solutions <span class="chev">▾</span></button>
+          <div class="topnav-dropdown">
+            <a href="https://automateanything.ai/solutions/"><span class="title">View All Solutions</span><span class="desc">Explore all automation capabilities</span></a>
+            <span class="group-label">Jump to</span>
+            <a href="https://automateanything.ai/solutions/#data-intake"><span class="title">Automated Data Intake</span><span class="desc">Pull in data from any source</span></a>
+            <a href="https://automateanything.ai/solutions/#task-routing"><span class="title">Task Routing & Assignment</span><span class="desc">Deliver info to the right people</span></a>
+            <a href="https://automateanything.ai/solutions/#workflow-automation"><span class="title">End-to-End Workflow Automation</span><span class="desc">Connect processes seamlessly</span></a>
+            <a href="https://automateanything.ai/solutions/#reminders"><span class="title">Automated Reminders & Follow-Ups</span><span class="desc">Never miss a deadline</span></a>
+            <a href="https://automateanything.ai/solutions/#document-creation"><span class="title">Instant Document Creation</span><span class="desc">Generate polished documents instantly</span></a>
+            <a href="https://automateanything.ai/solutions/#metrics"><span class="title">Live Metrics & Alerts</span><span class="desc">Real-time insights and tracking</span></a>
+          </div>
+        </div>
+
+        <div class="topnav-item" data-dropdown>
+          <button class="topnav-link" type="button">Use Cases <span class="chev">▾</span></button>
+          <div class="topnav-dropdown">
+            <a href="https://automateanything.ai/use-cases/marketing/"><span class="title">Marketing</span><span class="desc">Drive more leads</span></a>
+            <a href="https://automateanything.ai/use-cases/sales/"><span class="title">Sales</span><span class="desc">Increase conversion rates</span></a>
+            <a href="https://automateanything.ai/use-cases/operations/"><span class="title">Operations</span><span class="desc">Improve efficiency</span></a>
+            <a href="https://automateanything.ai/use-cases/customer-service/"><span class="title">Customer Service</span><span class="desc">Resolve issues faster</span></a>
+            <a href="https://automateanything.ai/use-cases/hr-people/"><span class="title">HR & People</span><span class="desc">Scale people processes</span></a>
+            <a href="https://automateanything.ai/use-cases/finance-admin/"><span class="title">Finance & Admin</span><span class="desc">Streamline finance ops</span></a>
+          </div>
+        </div>
+
+        <div class="topnav-item" data-dropdown>
+          <button class="topnav-link" type="button">Industry <span class="chev">▾</span></button>
+          <div class="topnav-dropdown">
+            <a href="https://automateanything.ai/industry/professional-services/"><span class="title">Professional Services</span><span class="desc">Firms, agencies, and consultancies</span></a>
+            <a href="https://automateanything.ai/industry/healthcare/"><span class="title">Healthcare</span><span class="desc">Clinics and patient services</span></a>
+            <a href="https://automateanything.ai/industry/financial-insurance/"><span class="title">Financial & Insurance</span><span class="desc">Brokers, MGAs, and lenders</span></a>
+            <a href="https://automateanything.ai/industry/logistics-field-services/"><span class="title">Logistics & Field Services</span><span class="desc">3PLs and field teams</span></a>
+            <a href="https://automateanything.ai/industry/real-estate/"><span class="title">Real Estate</span><span class="desc">Property management and leasing</span></a>
+          </div>
+        </div>
+
+        <a class="topnav-link" href="https://automateanything.ai/resources/">Resources</a>
+        <a class="topnav-cta" href="https://automateanything.ai/contact/">Get Started</a>
+      </div>
+
+      <button class="topnav-hamburger" id="topnav-hamburger" type="button" aria-label="Open menu">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+
+    <div class="topnav-mobile">
+      <details>
+        <summary>Solutions</summary>
+        <div class="topnav-mobile-section">
+          <a href="https://automateanything.ai/solutions/"><span class="title">View All Solutions</span><span class="desc">Explore all automation capabilities</span></a>
+          <a href="https://automateanything.ai/solutions/#data-intake">Automated Data Intake</a>
+          <a href="https://automateanything.ai/solutions/#task-routing">Task Routing & Assignment</a>
+          <a href="https://automateanything.ai/solutions/#workflow-automation">End-to-End Workflow Automation</a>
+          <a href="https://automateanything.ai/solutions/#reminders">Automated Reminders & Follow-Ups</a>
+          <a href="https://automateanything.ai/solutions/#document-creation">Instant Document Creation</a>
+          <a href="https://automateanything.ai/solutions/#metrics">Live Metrics & Alerts</a>
+        </div>
+      </details>
+      <details>
+        <summary>Use Cases</summary>
+        <div class="topnav-mobile-section">
+          <a href="https://automateanything.ai/use-cases/marketing/">Marketing</a>
+          <a href="https://automateanything.ai/use-cases/sales/">Sales</a>
+          <a href="https://automateanything.ai/use-cases/operations/">Operations</a>
+          <a href="https://automateanything.ai/use-cases/customer-service/">Customer Service</a>
+          <a href="https://automateanything.ai/use-cases/hr-people/">HR & People</a>
+          <a href="https://automateanything.ai/use-cases/finance-admin/">Finance & Admin</a>
+        </div>
+      </details>
+      <details>
+        <summary>Industry</summary>
+        <div class="topnav-mobile-section">
+          <a href="https://automateanything.ai/industry/professional-services/">Professional Services</a>
+          <a href="https://automateanything.ai/industry/healthcare/">Healthcare</a>
+          <a href="https://automateanything.ai/industry/financial-insurance/">Financial & Insurance</a>
+          <a href="https://automateanything.ai/industry/logistics-field-services/">Logistics & Field Services</a>
+          <a href="https://automateanything.ai/industry/real-estate/">Real Estate</a>
+        </div>
+      </details>
+      <a class="topnav-direct" href="https://automateanything.ai/resources/">Resources</a>
+      <a class="topnav-cta-mobile" href="https://automateanything.ai/contact/">Get Started</a>
+    </div>
+  </nav>
+
   <main>
     <div class="container">
       <section class="hero">
@@ -558,6 +806,41 @@
   </div>
 
   <script>
+  (function () {
+    // ============================================================================
+    // Top nav (dropdowns + mobile hamburger)
+    // ============================================================================
+    const topnav = document.getElementById('topnav');
+    const hamburger = document.getElementById('topnav-hamburger');
+    if (hamburger && topnav) {
+      hamburger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        topnav.classList.toggle('open');
+      });
+    }
+    document.querySelectorAll('[data-dropdown]').forEach((item) => {
+      const trigger = item.querySelector('.topnav-link');
+      if (!trigger) return;
+      trigger.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const wasOpen = item.classList.contains('open');
+        // Close other dropdowns
+        document.querySelectorAll('[data-dropdown].open').forEach((other) => {
+          if (other !== item) other.classList.remove('open');
+        });
+        item.classList.toggle('open', !wasOpen);
+      });
+    });
+    // Click outside closes all dropdowns and mobile menu
+    document.addEventListener('click', (e) => {
+      if (topnav && !topnav.contains(e.target)) {
+        topnav.classList.remove('open');
+        document.querySelectorAll('[data-dropdown].open').forEach(d => d.classList.remove('open'));
+      }
+    });
+
+  })();
+
   (function () {
     // ============================================================================
     // Constants
