@@ -1072,7 +1072,52 @@
     .error-msg { font-family: var(--font-mono); font-size: 12px; color: var(--error); margin-top: 0.75rem; line-height: 1.5; word-break: break-word; }
 
     .tx-head { display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 1.5rem; border-bottom: 1px solid var(--border); gap: 0.5rem; }
-    .tx-actions { display: flex; gap: 0.5rem; }
+    .tx-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
+    .export-menu-wrap { position: relative; }
+    .export-menu {
+      position: absolute; right: 0; top: calc(100% + 0.4rem);
+      background: var(--bg-card);
+      border: 1px solid var(--border-strong);
+      border-radius: 6px;
+      box-shadow: 0 8px 28px rgba(0,0,0,0.45);
+      z-index: 30; min-width: 13rem; overflow: hidden;
+      padding: 0.3rem;
+    }
+    .export-item {
+      display: block; width: 100%; text-align: left;
+      padding: 0.55rem 0.7rem;
+      background: transparent; border: none; border-radius: 4px;
+      color: var(--fg); font-family: var(--font-sans); font-size: 13px;
+      cursor: pointer; transition: background 0.12s;
+    }
+    .export-item:hover { background: rgba(75,108,140,0.15); }
+    .export-item:disabled { opacity: 0.4; cursor: not-allowed; }
+    .tx-search-row {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.7rem 1.5rem; border-bottom: 1px solid var(--border);
+      background: var(--bg-alt);
+    }
+    .tx-search {
+      flex: 1; padding: 0.5rem 0.8rem;
+      background: var(--bg-input); border: 1px solid var(--border-strong);
+      border-radius: 4px; color: var(--fg);
+      font-family: var(--font-sans); font-size: 14px;
+    }
+    .tx-search:focus { outline: none; border-color: var(--cta); box-shadow: 0 0 0 3px rgba(0,108,190,0.2); }
+    .tx-search-count { font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); white-space: nowrap; }
+    .tx-search-hit { background: rgba(245, 200, 66, 0.25); border-radius: 2px; }
+    .tx-search-hit.current { background: rgba(245, 200, 66, 0.6); color: #1a1a1a; }
+    /* Editable transcript */
+    #transcript-text[contenteditable="true"],
+    .turn-text[contenteditable="true"] {
+      outline: none;
+      background: rgba(0,108,190,0.06);
+      border-radius: 4px;
+      padding: 0.35rem 0.5rem;
+      box-shadow: inset 0 0 0 1px rgba(0,108,190,0.3);
+    }
+    .tx-body.editing { background: var(--bg-alt); }
+    .edit-hint { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--cta); padding: 0 1.5rem 0.5rem; }
     .tx-body { padding: 2rem 1.5rem; max-height: 60vh; overflow-y: auto; background: var(--bg-alt); }
     @media (min-width: 768px) { .tx-body { padding: 3rem 2.5rem; } }
     .tx-body p { font-family: var(--font-serif); font-weight: 400; font-size: 1.05rem; line-height: 1.7; white-space: pre-wrap; color: var(--fg); }
@@ -1813,11 +1858,24 @@
             <div class="mono-sm" id="word-count"></div>
             <div class="tx-actions">
               <button id="confidence-btn" class="btn hidden">Flag uncertain</button>
+              <button id="edit-btn" class="btn">Edit</button>
               <button id="copy-btn" class="btn">Copy</button>
-              <button id="download-btn" class="btn">.txt</button>
+              <div class="export-menu-wrap">
+                <button id="export-btn" class="btn" aria-haspopup="true" aria-expanded="false">Export ▾</button>
+                <div id="export-menu" class="export-menu hidden" role="menu">
+                  <button class="export-item" data-fmt="txt" role="menuitem">Plain text (.txt)</button>
+                  <button class="export-item" data-fmt="txt-ts" role="menuitem">Text with timestamps</button>
+                  <button class="export-item" data-fmt="srt" role="menuitem">Subtitles (.srt)</button>
+                  <button class="export-item" data-fmt="vtt" role="menuitem">Web captions (.vtt)</button>
+                </div>
+              </div>
             </div>
           </div>
-          <div class="tx-body">
+          <div id="tx-search-row" class="tx-search-row hidden">
+            <input id="tx-search" class="tx-search" type="search" placeholder="Search transcript…" aria-label="Search transcript">
+            <span id="tx-search-count" class="tx-search-count"></span>
+          </div>
+          <div class="tx-body" id="tx-body-root">
             <p id="transcript-text"></p>
             <div id="transcript-turns" class="turns hidden"></div>
           </div>
@@ -2053,6 +2111,7 @@
       keyterms: '',          // optional comma-separated vocabulary hints
       segments: null,        // [{start,end,text}] Whisper timestamps
       showConfidence: false, // toggle: highlight low-confidence words
+      editing: false,        // in-place transcript editing mode
       file: null,
       serverUrl: '',  // empty = same origin (shared)
       pairing: { code: '', polling: false, pollHandle: null },
@@ -2397,6 +2456,7 @@
 
       const showTx = !!state.transcript || (Array.isArray(state.utterances) && state.utterances.length);
       $('transcript-block').classList.toggle('hidden', !showTx);
+      $('tx-search-row').classList.toggle('hidden', !showTx);
       if (showTx) {
         const diarized = Array.isArray(state.utterances) && state.utterances.length > 0;
         $('transcript-text').classList.toggle('hidden', diarized);
@@ -2542,6 +2602,89 @@
         const s = speakerLabel(u.speaker);
         return `${s} · ${t}\n${u.text}`;
       }).join('\n\n');
+    }
+
+    // ============================================================================
+    // Export builders (SRT / VTT / timestamped text)
+    // ============================================================================
+
+    // Returns a normalized list of timed cues from whichever data we have:
+    // AssemblyAI utterances (with speaker) or Whisper segments. [] if none.
+    function timedCues() {
+      if (Array.isArray(state.utterances) && state.utterances.length) {
+        return state.utterances.map(u => ({
+          start: (u.start_ms || 0) / 1000,
+          end: (u.end_ms || 0) / 1000,
+          text: u.text || '',
+          speaker: speakerLabel(u.speaker),
+        }));
+      }
+      if (Array.isArray(state.segments) && state.segments.length) {
+        return state.segments.map(s => ({
+          start: s.start || 0,
+          end: s.end || 0,
+          text: s.text || '',
+          speaker: null,
+        }));
+      }
+      return [];
+    }
+
+    function hasTimestamps() {
+      return timedCues().length > 0;
+    }
+
+    // Format seconds -> "HH:MM:SS,mmm" (SRT) or "HH:MM:SS.mmm" (VTT)
+    function fmtStamp(sec, sep) {
+      if (!isFinite(sec) || sec < 0) sec = 0;
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = Math.floor(sec % 60);
+      const ms = Math.round((sec - Math.floor(sec)) * 1000);
+      const p2 = n => String(n).padStart(2, '0');
+      return `${p2(h)}:${p2(m)}:${p2(s)}${sep}${String(ms).padStart(3, '0')}`;
+    }
+
+    function buildSRT() {
+      const cues = timedCues();
+      if (!cues.length) return '';
+      return cues.map((c, i) => {
+        const line = c.speaker ? `${c.speaker}: ${c.text}` : c.text;
+        return `${i + 1}\n${fmtStamp(c.start, ',')} --> ${fmtStamp(c.end, ',')}\n${line}`;
+      }).join('\n\n') + '\n';
+    }
+
+    function buildVTT() {
+      const cues = timedCues();
+      if (!cues.length) return '';
+      const body = cues.map((c) => {
+        const line = c.speaker ? `<v ${c.speaker}>${c.text}` : c.text;
+        return `${fmtStamp(c.start, '.')} --> ${fmtStamp(c.end, '.')}\n${line}`;
+      }).join('\n\n');
+      return `WEBVTT\n\n${body}\n`;
+    }
+
+    // Plain text with leading [HH:MM:SS] timestamps per cue/turn
+    function buildTimestampedText() {
+      const cues = timedCues();
+      if (!cues.length) return state.transcript || '';
+      return cues.map(c => {
+        const stamp = fmtTimeMs(c.start * 1000);
+        const who = c.speaker ? `${c.speaker} ` : '';
+        return `[${stamp}] ${who}${c.text}`;
+      }).join('\n\n') + '\n';
+    }
+
+    function downloadText(text, ext, mime) {
+      const blob = new Blob([text], { type: (mime || 'text/plain') + ';charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = (state.file?.name || 'transcript').replace(/\.[^.]+$/, '') + '.' + ext;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     // ============================================================================
@@ -3289,17 +3432,121 @@
       const b = $('copy-btn'); const old = b.textContent;
       b.textContent = 'Copied'; setTimeout(() => { b.textContent = old; }, 1500);
     });
-    $('download-btn').addEventListener('click', () => {
-      const text = (Array.isArray(state.utterances) && state.utterances.length)
-        ? diarizedToText()
-        : state.transcript;
-      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = (state.file?.name || 'transcript').replace(/\.[^.]+$/, '') + '.txt';
-      a.click();
-      URL.revokeObjectURL(url);
+
+    // ---- Export menu ----
+    function toggleExportMenu(open) {
+      const menu = $('export-menu');
+      const willOpen = open != null ? open : menu.classList.contains('hidden');
+      menu.classList.toggle('hidden', !willOpen);
+      $('export-btn').setAttribute('aria-expanded', String(willOpen));
+      // Disable timestamp-dependent items when no timestamps exist
+      const ts = hasTimestamps();
+      menu.querySelectorAll('[data-fmt="txt-ts"],[data-fmt="srt"],[data-fmt="vtt"]').forEach(el => {
+        el.disabled = !ts;
+        el.title = ts ? '' : 'No timestamps available for this transcript';
+      });
+    }
+    $('export-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleExportMenu(); });
+    document.addEventListener('click', (e) => {
+      if (!$('export-menu').classList.contains('hidden') &&
+          !e.target.closest('.export-menu-wrap')) toggleExportMenu(false);
+    });
+    $('export-menu').addEventListener('click', (e) => {
+      const item = e.target.closest('.export-item');
+      if (!item || item.disabled) return;
+      const fmt = item.dataset.fmt;
+      const baseText = (Array.isArray(state.utterances) && state.utterances.length)
+        ? diarizedToText() : state.transcript;
+      if (fmt === 'txt') downloadText(baseText, 'txt', 'text/plain');
+      else if (fmt === 'txt-ts') downloadText(buildTimestampedText(), 'txt', 'text/plain');
+      else if (fmt === 'srt') downloadText(buildSRT(), 'srt', 'application/x-subrip');
+      else if (fmt === 'vtt') downloadText(buildVTT(), 'vtt', 'text/vtt');
+      toggleExportMenu(false);
+    });
+
+    // ---- In-place editing ----
+    function setEditing(on) {
+      state.editing = on;
+      const diarized = Array.isArray(state.utterances) && state.utterances.length > 0;
+      $('edit-btn').textContent = on ? 'Done' : 'Edit';
+      $('edit-btn').classList.toggle('active', on);
+      $('tx-body-hint') && $('tx-body-hint').remove();
+      if (diarized) {
+        document.querySelectorAll('#transcript-turns .turn-text').forEach(el => {
+          el.contentEditable = on ? 'true' : 'false';
+        });
+      } else {
+        $('transcript-text').contentEditable = on ? 'true' : 'false';
+      }
+      if (!on) {
+        // Persist edits back into state so copy/export use the edited text
+        if (diarized) {
+          const turnEls = document.querySelectorAll('#transcript-turns .turn');
+          turnEls.forEach((el, i) => {
+            const t = el.querySelector('.turn-text');
+            if (t && state.utterances[i]) state.utterances[i].text = t.innerText.trim();
+          });
+          state.transcript = state.utterances.map(u => u.text).join(' ');
+        } else {
+          state.transcript = $('transcript-text').innerText.trim();
+        }
+      }
+    }
+    $('edit-btn').addEventListener('click', () => setEditing(!state.editing));
+
+    // ---- Search within transcript ----
+    let searchHits = [], searchIdx = -1;
+    function clearSearchHighlights() {
+      document.querySelectorAll('.tx-search-hit').forEach(el => {
+        const parent = el.parentNode;
+        parent.replaceChild(document.createTextNode(el.textContent), el);
+        parent.normalize();
+      });
+      searchHits = []; searchIdx = -1;
+    }
+    function runSearch(q) {
+      clearSearchHighlights();
+      if (!q || q.length < 2) { $('tx-search-count').textContent = ''; return; }
+      const root = $('tx-body-root');
+      if (!root) return;
+      const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+      const textNodes = [];
+      while (walker.nextNode()) {
+        if (walker.currentNode.nodeValue.trim()) textNodes.push(walker.currentNode);
+      }
+      textNodes.forEach(node => {
+        const matches = [...node.nodeValue.matchAll(rx)];
+        if (!matches.length) return;
+        const frag = document.createDocumentFragment();
+        let last = 0;
+        matches.forEach(m => {
+          frag.appendChild(document.createTextNode(node.nodeValue.slice(last, m.index)));
+          const mark = document.createElement('mark');
+          mark.className = 'tx-search-hit';
+          mark.textContent = m[0];
+          frag.appendChild(mark);
+          searchHits.push(mark);
+          last = m.index + m[0].length;
+        });
+        frag.appendChild(document.createTextNode(node.nodeValue.slice(last)));
+        node.parentNode.replaceChild(frag, node);
+      });
+      $('tx-search-count').textContent = searchHits.length
+        ? `${searchHits.length} match${searchHits.length === 1 ? '' : 'es'}` : 'No matches';
+      if (searchHits.length) { searchIdx = 0; focusHit(); }
+    }
+    function focusHit() {
+      searchHits.forEach((h, i) => h.classList.toggle('current', i === searchIdx));
+      if (searchHits[searchIdx]) searchHits[searchIdx].scrollIntoView({ block: 'center', behavior: 'smooth' });
+    }
+    $('tx-search').addEventListener('input', (e) => runSearch(e.target.value.trim()));
+    $('tx-search').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' && searchHits.length) {
+        e.preventDefault();
+        searchIdx = (searchIdx + (e.shiftKey ? -1 : 1) + searchHits.length) % searchHits.length;
+        focusHit();
+      }
     });
 
     // ============================================================================
