@@ -1717,7 +1717,7 @@
             <svg class="keyterms-chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
           </summary>
           <div class="keyterms-body">
-            <textarea id="keyterms-input" class="keyterms-input" rows="2" placeholder="e.g. Yehoshua, Beit Shemesh, AssemblyAI, EBITDA"></textarea>
+            <textarea id="keyterms-input" class="keyterms-input" rows="2" placeholder="e.g. names, places, company names, acronyms"></textarea>
             <div class="keyterms-help">Comma-separated names, jargon, or acronyms to improve spelling accuracy. Especially helpful for proper nouns the model might not know.</div>
           </div>
         </details>
@@ -2766,6 +2766,7 @@
         wrap.appendChild(line);
       });
       p.appendChild(wrap);
+    }
 
     // ============================================================================
     // Diarized transcript renderer
