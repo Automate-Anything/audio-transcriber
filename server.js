@@ -213,22 +213,38 @@ app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
   const apiKey = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (!apiKey) {
     if (req.file) try { fs.unlinkSync(req.file.path); } catch {}
-    return res.status(401).json({ error: 'Missing OpenAI API key. Add yours in the app to continue.' });
-  }
-  if (!apiKey.startsWith('sk-') || apiKey.length < 20) {
-    if (req.file) try { fs.unlinkSync(req.file.path); } catch {}
-    return res.status(401).json({ error: "That key doesn't look right. OpenAI keys start with sk-" });
+    return res.status(401).json({ error: 'Missing API key. Add yours in the app to continue.' });
   }
   if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
+
+  // Branch on provider. Default is OpenAI Whisper (single-speaker).
+  const provider = (req.body.provider || 'openai').toLowerCase();
+
+  if (provider === 'assemblyai') {
+    // AssemblyAI keys are 32-char hex-ish strings, no required prefix
+    if (apiKey.length < 20) {
+      try { fs.unlinkSync(req.file.path); } catch {}
+      return res.status(401).json({ error: "That key doesn't look right for AssemblyAI." });
+    }
+    return startAssemblyJob(req, res, apiKey);
+  }
+
+  // OpenAI Whisper path (existing behavior)
+  if (!apiKey.startsWith('sk-') || apiKey.length < 20) {
+    try { fs.unlinkSync(req.file.path); } catch {}
+    return res.status(401).json({ error: "That key doesn't look right. OpenAI keys start with sk-" });
+  }
 
   const jobId = crypto.randomBytes(12).toString('hex');
   const job = {
     id: jobId,
+    provider: 'openai',
     status: 'processing',
     stage: 'analyzing',
     message: 'Analyzing audio',
     progress: 0,
     transcript: '',
+    utterances: null, // diarized output (AssemblyAI only)
     error: null,
     chunkInfo: { current: 0, total: 0, usedSilence: 0 },
     duration: null,
@@ -253,16 +269,173 @@ app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
   res.json({ jobId });
 });
 
+// ============================================================================
+// AssemblyAI (multi-speaker / diarized) handler
+// AssemblyAI's API handles files natively up to 2.2GB — no chunking needed.
+// Flow: upload bytes -> submit transcript with speaker_labels -> poll until done.
+// ============================================================================
+
+function startAssemblyJob(req, res, apiKey) {
+  const jobId = crypto.randomBytes(12).toString('hex');
+  const job = {
+    id: jobId,
+    provider: 'assemblyai',
+    status: 'processing',
+    stage: 'uploading',
+    message: 'Uploading audio',
+    progress: 0,
+    transcript: '',
+    utterances: null,
+    error: null,
+    duration: null,
+    fileSize: req.file.size,
+    originalName: req.file.originalname,
+    inputPath: req.file.path,
+    workDir: null,
+    chunkInfo: { current: 0, total: 0, usedSilence: 0 },
+    pathTaken: 'assemblyai',
+    createdAt: Date.now(),
+    apiKey,
+    assemblyTranscriptId: null,
+  };
+  jobs.set(jobId, job);
+
+  processAssemblyJob(job).catch(err => {
+    console.error(`[${jobId}] assemblyai error:`, err);
+    job.status = 'error';
+    job.stage  = 'error';
+    job.error  = sanitizeAssemblyError(err);
+  });
+
+  res.json({ jobId });
+}
+
+async function processAssemblyJob(job) {
+  // Step 1: upload the file to AssemblyAI's storage
+  job.stage = 'uploading';
+  job.message = 'Uploading to AssemblyAI';
+  job.progress = 5;
+
+  const fileStream = fs.createReadStream(job.inputPath);
+  const uploadRes = await fetch('https://api.assemblyai.com/v2/upload', {
+    method: 'POST',
+    headers: {
+      'Authorization': job.apiKey,
+      'Content-Type': 'application/octet-stream',
+    },
+    body: fileStream,
+    duplex: 'half',
+  });
+  if (!uploadRes.ok) {
+    const errText = await safeText(uploadRes);
+    throw new Error(`AssemblyAI upload failed (${uploadRes.status}): ${errText}`);
+  }
+  const { upload_url } = await uploadRes.json();
+  if (!upload_url) throw new Error('AssemblyAI upload did not return a URL.');
+
+  // Step 2: submit the transcript request with diarization on
+  job.stage = 'submitting';
+  job.message = 'Starting transcription';
+  job.progress = 15;
+
+  const submitRes = await fetch('https://api.assemblyai.com/v2/transcript', {
+    method: 'POST',
+    headers: {
+      'Authorization': job.apiKey,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      audio_url: upload_url,
+      speaker_labels: true,
+      // Punctuation and formatting are on by default; explicit for clarity.
+      punctuate: true,
+      format_text: true,
+    }),
+  });
+  if (!submitRes.ok) {
+    const errText = await safeText(submitRes);
+    throw new Error(`AssemblyAI submit failed (${submitRes.status}): ${errText}`);
+  }
+  const submitData = await submitRes.json();
+  if (!submitData.id) throw new Error('AssemblyAI submit did not return a transcript id.');
+  job.assemblyTranscriptId = submitData.id;
+
+  // Step 3: poll for completion. AssemblyAI's polling cadence rec: 3-5 seconds.
+  job.stage = 'transcribing';
+  job.message = 'Transcribing — this can take a few minutes';
+  job.progress = 25;
+
+  const startTime = Date.now();
+  const MAX_WAIT_MS = 30 * 60 * 1000; // 30 minutes ceiling
+  while (true) {
+    if (Date.now() - startTime > MAX_WAIT_MS) {
+      throw new Error('AssemblyAI took too long to finish (30+ minutes).');
+    }
+    await sleep(4000);
+    const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${submitData.id}`, {
+      headers: { 'Authorization': job.apiKey },
+    });
+    if (!pollRes.ok) {
+      const errText = await safeText(pollRes);
+      throw new Error(`AssemblyAI poll failed (${pollRes.status}): ${errText}`);
+    }
+    const pollData = await pollRes.json();
+
+    if (pollData.status === 'completed') {
+      // Build the utterances array for the client. Each utterance:
+      // { speaker, text, start_ms, end_ms }
+      const utterances = Array.isArray(pollData.utterances)
+        ? pollData.utterances.map(u => ({
+            speaker: u.speaker || 'A',
+            text: u.text || '',
+            start_ms: typeof u.start === 'number' ? u.start : 0,
+            end_ms: typeof u.end === 'number' ? u.end : 0,
+          }))
+        : [];
+      job.utterances = utterances;
+      job.transcript = pollData.text || '';
+      job.duration = typeof pollData.audio_duration === 'number' ? pollData.audio_duration : null;
+      job.status = 'done';
+      job.stage = 'done';
+      job.message = 'Done';
+      job.progress = 100;
+      cleanupJob(job);
+      return;
+    }
+    if (pollData.status === 'error') {
+      throw new Error(pollData.error || 'AssemblyAI returned an error.');
+    }
+    // queued, processing -> ease progress upward but cap before "done"
+    const elapsed = Date.now() - startTime;
+    job.progress = Math.min(90, 25 + Math.floor(elapsed / 1000)); // 1% per second up to 90%
+  }
+}
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+async function safeText(res) { try { return await res.text(); } catch { return ''; } }
+
+function sanitizeAssemblyError(err) {
+  const msg = (err && err.message) || String(err) || 'Transcription failed.';
+  // Strip internal stack-like text. Common patterns to surface verbatim:
+  if (/401|unauthor/i.test(msg)) return 'AssemblyAI rejected the API key. Double-check it.';
+  if (/insufficient|payment|quota/i.test(msg)) return 'AssemblyAI says the account is out of credit or unpaid.';
+  if (/took too long/i.test(msg)) return msg;
+  // Otherwise return a sanitized prefix
+  return msg.length > 200 ? msg.slice(0, 200) + '…' : msg;
+}
+
 app.get('/api/jobs/:id', jobsLimiter, (req, res) => {
   const job = jobs.get(req.params.id);
   if (!job) return res.status(404).json({ error: 'Job not found.' });
   res.json({
     id: job.id,
+    provider: job.provider || 'openai',
     status: job.status,
     stage: job.stage,
     message: job.message,
     progress: job.progress,
     transcript: job.transcript,
+    utterances: job.utterances,
     error: job.error,
     chunkInfo: job.chunkInfo,
     duration: job.duration,

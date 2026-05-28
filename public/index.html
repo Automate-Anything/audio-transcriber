@@ -451,6 +451,59 @@
 
     /* API key panel */
     .key-panel { padding: 1rem 1.25rem; }
+
+    /* ===== Recording type picker ===== */
+    .rec-type-panel { padding: 1rem 1.25rem; }
+    .rec-type-header { margin-bottom: 0.85rem; }
+    .rec-type-label { display: block; }
+    .rec-type-grid { display: grid; gap: 0.75rem; grid-template-columns: 1fr; }
+    @media (min-width: 600px) { .rec-type-grid { grid-template-columns: 1fr 1fr; } }
+    .rec-type-card {
+      display: flex; flex-direction: column; gap: 0.4rem;
+      padding: 1rem;
+      background: var(--bg-input);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      cursor: pointer;
+      text-align: left;
+      transition: background 0.15s, border-color 0.15s;
+      font-family: inherit;
+      color: inherit;
+    }
+    .rec-type-card:hover { border-color: var(--accent); }
+    .rec-type-card.active {
+      border-color: var(--cta);
+      background: rgba(0, 108, 190, 0.08);
+      box-shadow: 0 0 0 1px rgba(0, 108, 190, 0.4);
+    }
+    .rec-type-card .rec-type-top {
+      display: flex; align-items: center; gap: 0.55rem;
+    }
+    .rec-type-card .rec-type-icon {
+      font-size: 1.15rem; line-height: 1;
+      filter: grayscale(0.2);
+    }
+    .rec-type-card .rec-type-title {
+      font-family: var(--font-sans);
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: var(--fg);
+    }
+    .rec-type-card .rec-type-desc {
+      font-family: var(--font-sans);
+      font-size: 12.5px;
+      line-height: 1.5;
+      color: #cbd5e1;
+    }
+    .rec-type-card .rec-type-provider {
+      font-family: var(--font-mono);
+      font-size: 9.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      color: var(--fg-faint);
+      margin-top: 0.15rem;
+    }
+    .rec-type-card.active .rec-type-provider { color: var(--cta); }
     .key-header {
       display: flex; align-items: center; justify-content: space-between;
       gap: 0.75rem; flex-wrap: wrap;
@@ -617,6 +670,66 @@
     @media (min-width: 768px) { .tx-body { padding: 3rem 2.5rem; } }
     .tx-body p { font-family: var(--font-serif); font-weight: 400; font-size: 1.05rem; line-height: 1.7; white-space: pre-wrap; color: var(--fg); }
     @media (min-width: 768px) { .tx-body p { font-size: 1.15rem; } }
+
+    /* ===== Diarized transcript view ===== */
+    .turns { display: flex; flex-direction: column; gap: 1.5rem; }
+    .turn { display: flex; flex-direction: column; gap: 0.35rem; }
+    .turn-meta {
+      display: flex; align-items: center; gap: 0.6rem;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
+    .turn-speaker {
+      color: var(--fg);
+      font-weight: 600;
+      cursor: pointer;
+      padding: 0.1rem 0.4rem;
+      border: 1px solid transparent;
+      border-radius: 3px;
+      transition: border-color 0.15s, background 0.15s;
+      user-select: none;
+    }
+    .turn-speaker:hover {
+      border-color: var(--border-strong);
+      background: rgba(75, 108, 140, 0.1);
+    }
+    .turn-speaker.editing {
+      cursor: text;
+      border-color: var(--cta);
+      background: var(--bg-input);
+    }
+    .turn-speaker-input {
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--fg);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      font-weight: 600;
+      width: 7em;
+      padding: 0;
+    }
+    .turn-time { color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+    .turn-text {
+      font-family: var(--font-serif);
+      font-size: 1.05rem;
+      line-height: 1.65;
+      color: var(--fg);
+      white-space: pre-wrap;
+    }
+    @media (min-width: 768px) { .turn-text { font-size: 1.12rem; } }
+    /* Speaker color hint — gives a small visual cue per speaker without being loud */
+    .turn[data-speaker-idx="0"] .turn-speaker { color: #93c5fd; }
+    .turn[data-speaker-idx="1"] .turn-speaker { color: #fbbf24; }
+    .turn[data-speaker-idx="2"] .turn-speaker { color: #6ee7b7; }
+    .turn[data-speaker-idx="3"] .turn-speaker { color: #f0abfc; }
+    .turn[data-speaker-idx="4"] .turn-speaker { color: #fda4af; }
+    .turn[data-speaker-idx="5"] .turn-speaker { color: #a5b4fc; }
+    .turn-speaker.editing { color: var(--fg) !important; }
 
     /* ===== Modal ===== */
     .modal-overlay {
@@ -887,8 +1000,33 @@
         <button id="server-change-btn" class="change-link" type="button">Change</button>
       </div>
 
-      <!-- API key panel -->
-      <div class="panel" style="margin-bottom: 1rem;">
+      <!-- Recording type picker -->
+      <div class="panel rec-type-panel" style="margin-bottom: 1rem;">
+        <div class="rec-type-header">
+          <div class="rec-type-label mono-sm">What kind of recording?</div>
+        </div>
+        <div class="rec-type-grid">
+          <button type="button" class="rec-type-card active" data-rec-type="single" id="rec-type-single">
+            <div class="rec-type-top">
+              <span class="rec-type-icon" aria-hidden="true">🎙️</span>
+              <span class="rec-type-title">Single speaker</span>
+            </div>
+            <div class="rec-type-desc">Voice memo, dictation, solo podcast.</div>
+            <div class="rec-type-provider">via OpenAI Whisper</div>
+          </button>
+          <button type="button" class="rec-type-card" data-rec-type="multi" id="rec-type-multi">
+            <div class="rec-type-top">
+              <span class="rec-type-icon" aria-hidden="true">👥</span>
+              <span class="rec-type-title">Multiple speakers</span>
+            </div>
+            <div class="rec-type-desc">Meeting, interview, phone call. Each speaker labeled with timestamps.</div>
+            <div class="rec-type-provider">via AssemblyAI</div>
+          </button>
+        </div>
+      </div>
+
+      <!-- API key panel: OpenAI -->
+      <div id="key-panel-openai" class="panel key-provider-panel" style="margin-bottom: 1rem;">
         <div class="key-panel">
           <div class="key-header">
             <div class="key-label mono-sm">OpenAI API Key</div>
@@ -924,6 +1062,47 @@
           </div>
           <div class="key-help">
             Saved in this browser only. Wiped from server memory after each request. <strong>Note:</strong> OpenAI keeps audio you transcribe for 30 days per their policy.
+          </div>
+        </div>
+      </div>
+
+      <!-- API key panel: AssemblyAI -->
+      <div id="key-panel-assembly" class="panel key-provider-panel hidden" style="margin-bottom: 1rem;">
+        <div class="key-panel">
+          <div class="key-header">
+            <div class="key-label mono-sm">AssemblyAI API Key</div>
+            <a class="get-key-btn" href="https://www.assemblyai.com/app/api-keys" target="_blank" rel="noopener noreferrer">
+              Get API Key <span class="ext-icon" aria-hidden="true">↗</span>
+            </a>
+          </div>
+          <div id="aai-key-edit-mode">
+            <div class="key-input-wrap">
+              <input id="aai-api-key" class="key-input" type="password" placeholder="Your AssemblyAI key" autocomplete="off" spellcheck="false" autocapitalize="off">
+              <button id="aai-reveal" class="reveal-btn" type="button">Show</button>
+            </div>
+            <div class="key-actions">
+              <button id="aai-save-key" class="btn primary">Save Key</button>
+              <div id="aai-key-error" class="err-inline hidden"></div>
+            </div>
+            <div class="key-steps">
+              <div class="key-steps-title">Don't have one yet?</div>
+              <ol>
+                <li>Tap <strong>Get API Key</strong> above &mdash; opens AssemblyAI in a new tab</li>
+                <li>Sign in or create an AssemblyAI account (~$50 free credit included)</li>
+                <li>Copy the key from your dashboard</li>
+                <li>Paste it here</li>
+              </ol>
+            </div>
+          </div>
+          <div id="aai-key-saved-mode" class="hidden">
+            <div class="key-saved-line">
+              <span class="check">✓</span>
+              <span class="key-preview" id="aai-key-preview"></span>
+              <button id="aai-clear-key" class="reveal-btn" type="button">Change</button>
+            </div>
+          </div>
+          <div class="key-help">
+            Saved in this browser only. Wiped from server memory after each request. <strong>Note:</strong> AssemblyAI processes the audio on their cloud to do speaker separation. Their data retention policy applies.
           </div>
         </div>
       </div>
@@ -1007,6 +1186,7 @@
           </div>
           <div class="tx-body">
             <p id="transcript-text"></p>
+            <div id="transcript-turns" class="turns hidden"></div>
           </div>
         </div>
       </div>
@@ -1204,6 +1384,8 @@
     // Constants
     // ============================================================================
     const KEY_STORAGE = 'openai_api_key';
+    const AAI_KEY_STORAGE = 'assemblyai_api_key';
+    const REC_TYPE_STORAGE = 'recording_type';
     const SERVER_URL_STORAGE = 'custom_server_url';
     const PAIRING_STORAGE = 'pairing_in_progress';
 
@@ -1225,7 +1407,9 @@
     // State
     // ============================================================================
     const state = {
-      apiKey: '',
+      openaiKey: '',
+      assemblyKey: '',
+      recType: 'single',     // 'single' (OpenAI Whisper) | 'multi' (AssemblyAI)
       file: null,
       serverUrl: '',  // empty = same origin (shared)
       pairing: { code: '', polling: false, pollHandle: null },
@@ -1236,11 +1420,17 @@
       message: '',
       chunkInfo: { current: 0, total: 0, usedSilence: 0 },
       transcript: '',
+      utterances: null,
+      speakerNames: {},      // user-renamed speaker labels: { "A": "Sarah", ... }
       duration: null,
       error: '',
       elapsed: 0,
       pathTaken: '',
     };
+
+    // Active provider/key derived from recording type
+    function activeProvider() { return state.recType === 'multi' ? 'assemblyai' : 'openai'; }
+    function activeKey() { return state.recType === 'multi' ? state.assemblyKey : state.openaiKey; }
 
     let timerHandle = null;
     let elapsedStart = 0;
@@ -1267,7 +1457,11 @@
       // hosted elsewhere like Cloudflare Pages with a custom domain).
       return state.serverUrl || CENTRAL_API;
     }
-    function maskKey(k) { return 'sk-···' + k.slice(-4); }
+    function maskKey(k) {
+      if (!k) return '';
+      const prefix = k.startsWith('sk-') ? 'sk-' : '';
+      return prefix + '···' + k.slice(-4);
+    }
 
     function isOwnServer() { return !!state.serverUrl; }
 
@@ -1378,7 +1572,7 @@
     // ============================================================================
     // Upload + poll
     // ============================================================================
-    function uploadFile(file, apiKey, onProgress) {
+    function uploadFile(file, apiKey, provider, onProgress) {
       return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
@@ -1395,6 +1589,7 @@
         xhr.onerror = () => reject(new Error('Network error during upload.'));
         const form = new FormData();
         form.append('file', file);
+        form.append('provider', provider || 'openai');
         xhr.open('POST', `${apiBase()}/api/transcribe`);
         xhr.setRequestHeader('Authorization', 'Bearer ' + apiKey);
         xhr.send(form);
@@ -1416,18 +1611,22 @@
 
     async function run() {
       if (!state.file) return;
-      if (!state.apiKey) {
-        state.error = 'Save your OpenAI API key first.';
+      const key = activeKey();
+      const provider = activeProvider();
+      if (!key) {
+        state.error = provider === 'assemblyai'
+          ? 'Save your AssemblyAI API key first.'
+          : 'Save your OpenAI API key first.';
         state.stage = 'error'; render(); return;
       }
-      state.error = ''; state.transcript = '';
+      state.error = ''; state.transcript = ''; state.utterances = null; state.speakerNames = {};
       state.uploadProgress = 0; state.serverProgress = 0;
       state.message = 'Uploading'; state.stage = 'uploading';
       state.chunkInfo = { current: 0, total: 0, usedSilence: 0 };
       startTimer(); render();
 
       try {
-        const { jobId } = await uploadFile(state.file, state.apiKey, (p) => {
+        const { jobId } = await uploadFile(state.file, key, provider, (p) => {
           state.uploadProgress = p; render();
         });
         state.jobId = jobId;
@@ -1443,6 +1642,7 @@
           state.duration = job.duration;
           state.pathTaken = job.pathTaken || '';
           if (job.transcript) state.transcript = job.transcript;
+          if (job.utterances) state.utterances = job.utterances;
           if (job.error) state.error = job.error;
           render();
         });
@@ -1452,6 +1652,7 @@
         state.stage = 'done';
         state.message = 'Complete';
         state.transcript = final.transcript || state.transcript;
+        state.utterances = final.utterances || state.utterances;
         render();
       } catch (e) {
         state.error = e.message || 'Something went wrong.';
@@ -1473,9 +1674,10 @@
         $('file-meta').textContent = parts.join(' ');
 
         const busy = ['uploading','server-stage'].includes(state.stage);
-        $('run-btn').disabled = busy || !state.apiKey;
+        const haveKey = !!activeKey();
+        $('run-btn').disabled = busy || !haveKey;
         $('change-btn').disabled = busy;
-        $('run-btn').textContent = busy ? 'Working...' : (state.apiKey ? 'Transcribe' : 'Add key first');
+        $('run-btn').textContent = busy ? 'Working...' : (haveKey ? 'Transcribe' : 'Add key first');
       }
 
       renderPathPicker();
@@ -1509,13 +1711,129 @@
         $('error-msg').textContent = state.error;
       }
 
-      const showTx = !!state.transcript;
+      const showTx = !!state.transcript || (Array.isArray(state.utterances) && state.utterances.length);
       $('transcript-block').classList.toggle('hidden', !showTx);
       if (showTx) {
-        const words = state.transcript.split(/\s+/).filter(Boolean).length;
-        $('word-count').textContent = `Transcript · ${words} words`;
-        $('transcript-text').textContent = state.transcript;
+        const diarized = Array.isArray(state.utterances) && state.utterances.length > 0;
+        $('transcript-text').classList.toggle('hidden', diarized);
+        $('transcript-turns').classList.toggle('hidden', !diarized);
+
+        const words = (state.transcript || '').split(/\s+/).filter(Boolean).length;
+        if (diarized) {
+          const speakers = new Set(state.utterances.map(u => u.speaker));
+          $('word-count').textContent = `Transcript · ${words} words · ${speakers.size} speaker${speakers.size === 1 ? '' : 's'}`;
+          renderTurns();
+        } else {
+          $('word-count').textContent = `Transcript · ${words} words`;
+          $('transcript-text').textContent = state.transcript;
+        }
       }
+    }
+
+    // ============================================================================
+    // Diarized transcript renderer
+    // ============================================================================
+    function speakerLabel(rawId) {
+      // rawId is what AssemblyAI returns (typically 'A', 'B', 'C', ... or '1','2',...)
+      if (state.speakerNames[rawId]) return state.speakerNames[rawId];
+      return 'Speaker ' + rawId;
+    }
+
+    function fmtTimeMs(ms) {
+      if (typeof ms !== 'number') return '';
+      const total = Math.floor(ms / 1000);
+      const h = Math.floor(total / 3600);
+      const m = Math.floor((total % 3600) / 60);
+      const s = total % 60;
+      const mm = String(m).padStart(2, '0'), ss = String(s).padStart(2, '0');
+      return h > 0 ? `${h}:${mm}:${ss}` : `${m}:${ss}`;
+    }
+
+    function speakerIdx(rawId) {
+      // Stable index per speaker for color assignment
+      if (!state._speakerIdxMap) state._speakerIdxMap = {};
+      if (state._speakerIdxMap[rawId] == null) {
+        state._speakerIdxMap[rawId] = Object.keys(state._speakerIdxMap).length;
+      }
+      return state._speakerIdxMap[rawId];
+    }
+
+    function renderTurns() {
+      const container = $('transcript-turns');
+      container.innerHTML = '';
+      if (!Array.isArray(state.utterances)) return;
+      for (const u of state.utterances) {
+        const wrap = document.createElement('div');
+        wrap.className = 'turn';
+        wrap.dataset.speakerIdx = speakerIdx(u.speaker);
+
+        const meta = document.createElement('div');
+        meta.className = 'turn-meta';
+
+        const spk = document.createElement('span');
+        spk.className = 'turn-speaker';
+        spk.dataset.rawSpeaker = u.speaker;
+        spk.textContent = speakerLabel(u.speaker);
+        spk.title = 'Click to rename this speaker';
+        spk.addEventListener('click', (e) => startRenameSpeaker(spk, u.speaker));
+
+        const time = document.createElement('span');
+        time.className = 'turn-time';
+        time.textContent = fmtTimeMs(u.start_ms);
+
+        meta.appendChild(spk);
+        meta.appendChild(time);
+
+        const text = document.createElement('div');
+        text.className = 'turn-text';
+        text.textContent = u.text;
+
+        wrap.appendChild(meta);
+        wrap.appendChild(text);
+        container.appendChild(wrap);
+      }
+    }
+
+    function startRenameSpeaker(labelEl, rawId) {
+      if (labelEl.classList.contains('editing')) return;
+      const current = state.speakerNames[rawId] || ('Speaker ' + rawId);
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'turn-speaker-input';
+      input.value = current;
+      input.maxLength = 40;
+      const prevText = labelEl.textContent;
+      labelEl.classList.add('editing');
+      labelEl.textContent = '';
+      labelEl.appendChild(input);
+      input.focus();
+      input.select();
+
+      const commit = () => {
+        const v = input.value.trim();
+        if (v) state.speakerNames[rawId] = v;
+        // Re-render all turns (cheap; updates every instance of this speaker)
+        renderTurns();
+      };
+      const cancel = () => {
+        labelEl.classList.remove('editing');
+        labelEl.textContent = prevText;
+      };
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+      });
+      input.addEventListener('blur', commit);
+    }
+
+    // Build a copyable / downloadable diarized string from current utterances
+    function diarizedToText() {
+      if (!Array.isArray(state.utterances)) return state.transcript || '';
+      return state.utterances.map(u => {
+        const t = fmtTimeMs(u.start_ms);
+        const s = speakerLabel(u.speaker);
+        return `${s} · ${t}\n${u.text}`;
+      }).join('\n\n');
     }
 
     // ============================================================================
@@ -1647,54 +1965,106 @@
     }
 
     // ============================================================================
-    // API key wiring
+    // API key wiring (generic — instantiated for OpenAI and AssemblyAI)
     // ============================================================================
-    function showKeyError(msg) {
-      const el = $('key-error');
-      el.textContent = msg; el.classList.remove('hidden');
-      setTimeout(() => el.classList.add('hidden'), 4000);
-    }
-    function showSavedKey(key) {
-      $('key-preview').textContent = maskKey(key);
-      $('key-edit-mode').classList.add('hidden');
-      $('key-saved-mode').classList.remove('hidden');
-    }
-    function showEditKey() {
-      $('key-edit-mode').classList.remove('hidden');
-      $('key-saved-mode').classList.add('hidden');
+    function wireKeyPanel(cfg) {
+      // cfg: { inputId, revealId, saveBtnId, errorId, savedModeId, editModeId,
+      //        previewId, clearBtnId, storageKey, validate(v), onChange(key) }
+      const $i = $(cfg.inputId), $rev = $(cfg.revealId), $save = $(cfg.saveBtnId);
+      const $err = $(cfg.errorId), $saved = $(cfg.savedModeId), $edit = $(cfg.editModeId);
+      const $prev = $(cfg.previewId), $clr = $(cfg.clearBtnId);
+
+      function showErr(msg) {
+        $err.textContent = msg; $err.classList.remove('hidden');
+        setTimeout(() => $err.classList.add('hidden'), 4000);
+      }
+      function showSaved(key) {
+        $prev.textContent = maskKey(key);
+        $edit.classList.add('hidden');
+        $saved.classList.remove('hidden');
+      }
+      function showEdit() {
+        $edit.classList.remove('hidden');
+        $saved.classList.add('hidden');
+      }
+
+      $rev.addEventListener('click', () => {
+        const showing = $i.type === 'text';
+        $i.type = showing ? 'password' : 'text';
+        $rev.textContent = showing ? 'Show' : 'Hide';
+      });
+
+      $save.addEventListener('click', () => {
+        const v = $i.value.trim();
+        const err = cfg.validate(v);
+        if (err) { showErr(err); return; }
+        try { localStorage.setItem(cfg.storageKey, v); } catch {}
+        cfg.onChange(v);
+        showSaved(v);
+        render();
+      });
+
+      $clr.addEventListener('click', () => {
+        try { localStorage.removeItem(cfg.storageKey); } catch {}
+        cfg.onChange('');
+        $i.value = '';
+        $i.type = 'password';
+        $rev.textContent = 'Show';
+        showEdit();
+        render();
+      });
+
+      $i.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); $save.click(); }
+      });
+
+      return { showSaved, showEdit };
     }
 
-    $('reveal').addEventListener('click', () => {
-      const el = $('api-key');
-      const showing = el.type === 'text';
-      el.type = showing ? 'password' : 'text';
-      $('reveal').textContent = showing ? 'Show' : 'Hide';
+    const openaiKeyUI = wireKeyPanel({
+      inputId: 'api-key', revealId: 'reveal', saveBtnId: 'save-key',
+      errorId: 'key-error', savedModeId: 'key-saved-mode', editModeId: 'key-edit-mode',
+      previewId: 'key-preview', clearBtnId: 'clear-key',
+      storageKey: KEY_STORAGE,
+      validate: (v) => {
+        if (!v) return 'Paste your key first.';
+        if (!v.startsWith('sk-')) return 'Key should start with sk-';
+        if (v.length < 20) return 'Key looks too short.';
+        return null;
+      },
+      onChange: (v) => { state.openaiKey = v; },
     });
 
-    $('save-key').addEventListener('click', () => {
-      const v = $('api-key').value.trim();
-      if (!v) { showKeyError('Paste your key first.'); return; }
-      if (!v.startsWith('sk-')) { showKeyError('Key should start with sk-'); return; }
-      if (v.length < 20) { showKeyError('Key looks too short.'); return; }
-      try { localStorage.setItem(KEY_STORAGE, v); } catch {}
-      state.apiKey = v;
-      showSavedKey(v);
+    const assemblyKeyUI = wireKeyPanel({
+      inputId: 'aai-api-key', revealId: 'aai-reveal', saveBtnId: 'aai-save-key',
+      errorId: 'aai-key-error', savedModeId: 'aai-key-saved-mode', editModeId: 'aai-key-edit-mode',
+      previewId: 'aai-key-preview', clearBtnId: 'aai-clear-key',
+      storageKey: AAI_KEY_STORAGE,
+      validate: (v) => {
+        if (!v) return 'Paste your key first.';
+        if (v.length < 20) return 'Key looks too short.';
+        // AssemblyAI keys are typically 32 hex chars but the format isn't
+        // strictly documented as a regex. Don't be too aggressive about
+        // pattern matching — the server / API will reject genuinely bad keys.
+        return null;
+      },
+      onChange: (v) => { state.assemblyKey = v; },
+    });
+
+    // ============================================================================
+    // Recording type picker wiring
+    // ============================================================================
+    function setRecType(type) {
+      state.recType = type === 'multi' ? 'multi' : 'single';
+      try { localStorage.setItem(REC_TYPE_STORAGE, state.recType); } catch {}
+      $('rec-type-single').classList.toggle('active', state.recType === 'single');
+      $('rec-type-multi').classList.toggle('active', state.recType === 'multi');
+      $('key-panel-openai').classList.toggle('hidden', state.recType !== 'single');
+      $('key-panel-assembly').classList.toggle('hidden', state.recType !== 'multi');
       render();
-    });
-
-    $('clear-key').addEventListener('click', () => {
-      try { localStorage.removeItem(KEY_STORAGE); } catch {}
-      state.apiKey = '';
-      $('api-key').value = '';
-      $('api-key').type = 'password';
-      $('reveal').textContent = 'Show';
-      showEditKey();
-      render();
-    });
-
-    $('api-key').addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') { e.preventDefault(); $('save-key').click(); }
-    });
+    }
+    $('rec-type-single').addEventListener('click', () => setRecType('single'));
+    $('rec-type-multi').addEventListener('click', () => setRecType('multi'));
 
     // ============================================================================
     // File wiring
@@ -1714,6 +2084,7 @@
       if (!f) return;
       state.file = f; state.duration = null;
       state.stage = 'idle'; state.error = ''; state.transcript = '';
+      state.utterances = null; state.speakerNames = {}; state._speakerIdxMap = {};
       state.uploadProgress = 0; state.serverProgress = 0;
       state.chunkInfo = { current: 0, total: 0, usedSilence: 0 };
       state.elapsed = 0;
@@ -1723,6 +2094,7 @@
     $('change-btn').addEventListener('click', () => {
       state.file = null; state.duration = null; state.stage = 'idle';
       state.transcript = ''; state.error = '';
+      state.utterances = null; state.speakerNames = {}; state._speakerIdxMap = {};
       fileInput.value = '';
       render();
     });
@@ -1730,12 +2102,18 @@
     $('run-btn').addEventListener('click', run);
 
     $('copy-btn').addEventListener('click', async () => {
-      try { await navigator.clipboard.writeText(state.transcript); } catch {}
+      const text = (Array.isArray(state.utterances) && state.utterances.length)
+        ? diarizedToText()
+        : state.transcript;
+      try { await navigator.clipboard.writeText(text); } catch {}
       const b = $('copy-btn'); const old = b.textContent;
       b.textContent = 'Copied'; setTimeout(() => { b.textContent = old; }, 1500);
     });
     $('download-btn').addEventListener('click', () => {
-      const blob = new Blob([state.transcript], { type: 'text/plain;charset=utf-8' });
+      const text = (Array.isArray(state.utterances) && state.utterances.length)
+        ? diarizedToText()
+        : state.transcript;
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -1850,7 +2228,15 @@
     // ============================================================================
     try {
       const savedKey = localStorage.getItem(KEY_STORAGE);
-      if (savedKey) { state.apiKey = savedKey; showSavedKey(savedKey); }
+      if (savedKey) { state.openaiKey = savedKey; openaiKeyUI.showSaved(savedKey); }
+    } catch {}
+    try {
+      const savedAaiKey = localStorage.getItem(AAI_KEY_STORAGE);
+      if (savedAaiKey) { state.assemblyKey = savedAaiKey; assemblyKeyUI.showSaved(savedAaiKey); }
+    } catch {}
+    try {
+      const savedType = localStorage.getItem(REC_TYPE_STORAGE);
+      if (savedType === 'multi' || savedType === 'single') setRecType(savedType);
     } catch {}
     try {
       const savedServer = localStorage.getItem(SERVER_URL_STORAGE);
