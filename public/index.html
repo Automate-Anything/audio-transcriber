@@ -477,12 +477,17 @@
       box-shadow: 0 0 0 1px rgba(0, 108, 190, 0.4);
     }
     .rec-type-card .rec-type-top {
-      display: flex; align-items: center; gap: 0.55rem;
+      display: flex; align-items: center; gap: 0.65rem;
     }
     .rec-type-card .rec-type-icon {
-      font-size: 1.15rem; line-height: 1;
-      filter: grayscale(0.2);
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 22px; height: 22px;
+      color: var(--fg-muted);
+      transition: color 0.15s;
+      flex-shrink: 0;
     }
+    .rec-type-card .rec-type-icon svg { display: block; }
+    .rec-type-card.active .rec-type-icon { color: var(--cta); }
     .rec-type-card .rec-type-title {
       font-family: var(--font-sans);
       font-size: 0.95rem;
@@ -1008,7 +1013,14 @@
         <div class="rec-type-grid">
           <button type="button" class="rec-type-card active" data-rec-type="single" id="rec-type-single">
             <div class="rec-type-top">
-              <span class="rec-type-icon" aria-hidden="true">🎙️</span>
+              <span class="rec-type-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="2" width="6" height="11" rx="3"/>
+                  <path d="M19 10v1a7 7 0 0 1-14 0v-1"/>
+                  <line x1="12" y1="18" x2="12" y2="22"/>
+                  <line x1="8" y1="22" x2="16" y2="22"/>
+                </svg>
+              </span>
               <span class="rec-type-title">Single speaker</span>
             </div>
             <div class="rec-type-desc">Voice memo, dictation, solo podcast.</div>
@@ -1016,7 +1028,14 @@
           </button>
           <button type="button" class="rec-type-card" data-rec-type="multi" id="rec-type-multi">
             <div class="rec-type-top">
-              <span class="rec-type-icon" aria-hidden="true">👥</span>
+              <span class="rec-type-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+                  <circle cx="9" cy="7" r="4"/>
+                  <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+                </svg>
+              </span>
               <span class="rec-type-title">Multiple speakers</span>
             </div>
             <div class="rec-type-desc">Meeting, interview, phone call. Each speaker labeled with timestamps.</div>
