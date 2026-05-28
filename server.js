@@ -71,6 +71,8 @@ app.use(helmet({
       "script-src": ["'self'", "'unsafe-inline'"],
       "style-src": ["'self'", "'unsafe-inline'"],
       "img-src": ["'self'", "data:", "https://automateanything.ai"],
+      // Allow blob: URLs for in-browser audio recording playback.
+      "media-src": ["'self'", "blob:"],
       // Permit calls back to the app's own origin + any HTTPS endpoint (BYO
       // server feature needs this) + localhost for dev. Blocks http: outside
       // dev so audio + keys can't be exfiltrated to insecure endpoints.

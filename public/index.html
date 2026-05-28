@@ -2603,6 +2603,9 @@
       rec.blobUrl = URL.createObjectURL(blob);
       const audio = $('pb-audio');
       audio.src = rec.blobUrl;
+      // Explicit load() makes some browsers (Safari especially) actually
+      // start fetching metadata after src change rather than lazily
+      try { audio.load(); } catch {}
       audio.playbackRate = 1.0;
       $('pb-meta').textContent = fmtBytes(blob.size);
       // Reset playback UI
@@ -2660,8 +2663,24 @@
       audio.addEventListener('pause', () => setPlayIconState(false));
 
       $('pb-play-btn').addEventListener('click', () => {
-        if (audio.paused) audio.play().catch(() => {});
-        else audio.pause();
+        if (audio.paused) {
+          audio.play().catch((err) => {
+            const status = $('pb-status');
+            status.classList.remove('hidden');
+            status.classList.add('error');
+            status.textContent = 'Playback failed: ' + (err && err.message ? err.message : err);
+          });
+        } else {
+          audio.pause();
+        }
+      });
+      audio.addEventListener('error', () => {
+        const e = audio.error;
+        const msg = e ? `Audio error ${e.code}: ${e.message || ''}`.trim() : 'Audio error.';
+        const status = $('pb-status');
+        status.classList.remove('hidden');
+        status.classList.add('error');
+        status.textContent = msg;
       });
 
       $('pb-back-btn').addEventListener('click', () => {
