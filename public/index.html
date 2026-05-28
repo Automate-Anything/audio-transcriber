@@ -501,6 +501,36 @@
     @media (max-width: 600px) {
       .lang-col-input { width: 100%; min-width: 0; }
     }
+    /* Keyterms disclosure */
+    .keyterms-details { margin-top: 0.9rem; border-top: 1px solid var(--border); padding-top: 0.5rem; }
+    .keyterms-summary {
+      list-style: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.35rem 0; user-select: none;
+    }
+    .keyterms-summary::-webkit-details-marker { display: none; }
+    .keyterms-summary-text {
+      font-family: var(--font-mono); font-size: 10.5px;
+      text-transform: uppercase; letter-spacing: 0.18em; color: #cbd5e1;
+    }
+    .keyterms-optional { color: var(--fg-faint); }
+    .keyterms-chev { color: var(--cta); transition: transform 0.25s; flex-shrink: 0; }
+    .keyterms-details[open] .keyterms-chev { transform: rotate(180deg); }
+    .keyterms-body { padding-top: 0.6rem; }
+    .keyterms-input {
+      width: 100%; resize: vertical; min-height: 2.6rem;
+      padding: 0.6rem 0.8rem;
+      background: var(--bg-input);
+      border: 1px solid var(--border-strong);
+      border-radius: 4px;
+      color: var(--fg);
+      font-family: var(--font-sans); font-size: 14px; line-height: 1.5;
+      transition: border-color 0.15s;
+    }
+    .keyterms-input:focus { outline: none; border-color: var(--cta); box-shadow: 0 0 0 3px rgba(0,108,190,0.2); }
+    .keyterms-help { font-family: var(--font-sans); font-size: 12px; color: var(--fg-muted); margin-top: 0.4rem; line-height: 1.5; }
+    /* Low-confidence word highlight */
+    .lc-word { border-bottom: 2px dotted rgba(245, 158, 11, 0.7); cursor: help; }
     .rec-type-header { margin-bottom: 0.85rem; }
     .rec-type-label { display: block; }
     .rec-type-grid { display: grid; gap: 0.75rem; grid-template-columns: 1fr; }
@@ -961,6 +991,7 @@
       border: 1px solid var(--accent); background: transparent; color: var(--fg-muted);
     }
     .btn:hover:not(:disabled) { background: var(--accent); color: var(--fg); border-color: var(--accent); }
+    .btn.active { background: var(--cta); color: var(--fg); border-color: var(--cta); }
     .btn.primary { background: var(--cta); color: var(--fg); border-color: var(--cta); }
     .btn.primary:hover:not(:disabled) { background: var(--cta-hover); border-color: var(--cta-hover); }
     .btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -1505,6 +1536,16 @@
             </select>
           </div>
         </div>
+        <details class="keyterms-details">
+          <summary class="keyterms-summary">
+            <span class="keyterms-summary-text">Custom words &amp; names <span class="keyterms-optional">(optional)</span></span>
+            <svg class="keyterms-chev" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+          </summary>
+          <div class="keyterms-body">
+            <textarea id="keyterms-input" class="keyterms-input" rows="2" placeholder="e.g. Yehoshua, Beit Shemesh, AssemblyAI, EBITDA"></textarea>
+            <div class="keyterms-help">Comma-separated names, jargon, or acronyms to improve spelling accuracy. Especially helpful for proper nouns the model might not know.</div>
+          </div>
+        </details>
       </div>
 
       <!-- API key panel: OpenAI -->
@@ -1771,6 +1812,7 @@
           <div class="tx-head">
             <div class="mono-sm" id="word-count"></div>
             <div class="tx-actions">
+              <button id="confidence-btn" class="btn hidden">Flag uncertain</button>
               <button id="copy-btn" class="btn">Copy</button>
               <button id="download-btn" class="btn">.txt</button>
             </div>
@@ -1982,6 +2024,7 @@
     const AAI_KEY_STORAGE = 'assemblyai_api_key';
     const REC_TYPE_STORAGE = 'recording_type';
     const LANG_STORAGE = 'audio_language';
+    const KEYTERMS_STORAGE = 'keyterms';
     const SERVER_URL_STORAGE = 'custom_server_url';
     const PAIRING_STORAGE = 'pairing_in_progress';
 
@@ -2007,6 +2050,9 @@
       assemblyKey: '',
       recType: 'single',     // 'single' (OpenAI Whisper) | 'multi' (AssemblyAI)
       language: '',          // ISO 639-1 code, e.g. 'he', 'en'; empty = auto-detect
+      keyterms: '',          // optional comma-separated vocabulary hints
+      segments: null,        // [{start,end,text}] Whisper timestamps
+      showConfidence: false, // toggle: highlight low-confidence words
       file: null,
       serverUrl: '',  // empty = same origin (shared)
       pairing: { code: '', polling: false, pollHandle: null },
@@ -2192,6 +2238,7 @@
         form.append('file', file);
         form.append('provider', provider || 'openai');
         if (language) form.append('language', language);
+        if (state.keyterms) form.append('keyterms', state.keyterms);
         xhr.open('POST', `${apiBase()}/api/transcribe`);
         xhr.setRequestHeader('Authorization', 'Bearer ' + apiKey);
         xhr.send(form);
@@ -2221,7 +2268,7 @@
           : 'Save your OpenAI API key first.';
         state.stage = 'error'; render(); return;
       }
-      state.error = ''; state.transcript = ''; state.utterances = null; state.speakerNames = {};
+      state.error = ''; state.transcript = ''; state.utterances = null; state.segments = null; state.speakerNames = {};
       state.uploadProgress = 0; state.serverProgress = 0;
       state.message = 'Uploading'; state.stage = 'uploading';
       state.chunkInfo = { current: 0, total: 0, usedSilence: 0 };
@@ -2245,6 +2292,7 @@
           state.pathTaken = job.pathTaken || '';
           if (job.transcript) state.transcript = job.transcript;
           if (job.utterances) state.utterances = job.utterances;
+          if (job.segments) state.segments = job.segments;
           if (job.error) state.error = job.error;
           render();
         });
@@ -2255,6 +2303,7 @@
         state.message = 'Complete';
         state.transcript = final.transcript || state.transcript;
         state.utterances = final.utterances || state.utterances;
+        state.segments = final.segments || state.segments;
         render();
       } catch (e) {
         state.error = e.message || 'Something went wrong.';
@@ -2353,6 +2402,12 @@
         $('transcript-text').classList.toggle('hidden', diarized);
         $('transcript-turns').classList.toggle('hidden', !diarized);
 
+        // Confidence toggle only makes sense when we have per-word confidence
+        const hasWordConfidence = diarized && state.utterances.some(
+          u => Array.isArray(u.words) && u.words.some(w => w.confidence != null)
+        );
+        $('confidence-btn').classList.toggle('hidden', !hasWordConfidence);
+
         const words = (state.transcript || '').split(/\s+/).filter(Boolean).length;
         if (diarized) {
           const speakers = new Set(state.utterances.map(u => u.speaker));
@@ -2421,7 +2476,25 @@
 
         const text = document.createElement('div');
         text.className = 'turn-text';
-        text.textContent = u.text;
+        // If per-word confidence is available and the user has flagging on,
+        // wrap low-confidence words so the reader knows where to double-check.
+        if (state.showConfidence && Array.isArray(u.words) && u.words.length) {
+          for (let wi = 0; wi < u.words.length; wi++) {
+            const w = u.words[wi];
+            if (w.confidence != null && w.confidence < 0.5) {
+              const span = document.createElement('span');
+              span.className = 'lc-word';
+              span.textContent = w.text;
+              span.title = `Low confidence (${Math.round(w.confidence * 100)}%)`;
+              text.appendChild(span);
+            } else {
+              text.appendChild(document.createTextNode(w.text));
+            }
+            if (wi < u.words.length - 1) text.appendChild(document.createTextNode(' '));
+          }
+        } else {
+          text.textContent = u.text;
+        }
 
         wrap.appendChild(meta);
         wrap.appendChild(text);
@@ -2712,6 +2785,16 @@
       } catch {}
     }
     $('lang-select').addEventListener('change', (e) => setLanguage(e.target.value));
+
+    // Keyterms: persist on input (debounced via simple immediate write — small data)
+    function setKeyterms(val) {
+      state.keyterms = (val || '').trim();
+      try {
+        if (state.keyterms) localStorage.setItem(KEYTERMS_STORAGE, state.keyterms);
+        else localStorage.removeItem(KEYTERMS_STORAGE);
+      } catch {}
+    }
+    $('keyterms-input').addEventListener('input', (e) => setKeyterms(e.target.value));
 
     // ============================================================================
     // File wiring
@@ -3191,6 +3274,13 @@
 
     $('run-btn').addEventListener('click', run);
 
+    $('confidence-btn').addEventListener('click', () => {
+      state.showConfidence = !state.showConfidence;
+      $('confidence-btn').textContent = state.showConfidence ? 'Hide flags' : 'Flag uncertain';
+      $('confidence-btn').classList.toggle('active', state.showConfidence);
+      renderTurns();
+    });
+
     $('copy-btn').addEventListener('click', async () => {
       const text = (Array.isArray(state.utterances) && state.utterances.length)
         ? diarizedToText()
@@ -3333,10 +3423,17 @@
       if (savedLang) {
         state.language = savedLang;
         const sel = $('lang-select');
-        // Verify it's an option we offer (defensive against stale stored codes)
-        if ([...sel.options].some(o => o.value === savedLang)) {
-          sel.value = savedLang;
-        }
+        if ([...sel.options].some(o => o.value === savedLang)) sel.value = savedLang;
+      }
+    } catch {}
+    try {
+      const savedKeyterms = localStorage.getItem(KEYTERMS_STORAGE);
+      if (savedKeyterms) {
+        state.keyterms = savedKeyterms;
+        $('keyterms-input').value = savedKeyterms;
+        // Auto-expand the disclosure if there's a saved value, so it's visible
+        const det = document.querySelector('.keyterms-details');
+        if (det) det.open = true;
       }
     } catch {}
     try {

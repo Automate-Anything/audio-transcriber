@@ -228,13 +228,17 @@ app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
   const rawLang = (req.body.language || '').toString().trim().toLowerCase();
   const language = /^[a-z]{2}(_[a-z]{2})?$/.test(rawLang) ? rawLang : '';
 
+  // Optional comma/newline-separated vocabulary hints (names, jargon).
+  // Capped in length and item count to keep requests sane.
+  const keyterms = (req.body.keyterms || '').toString().trim().slice(0, 800);
+
   if (provider === 'assemblyai') {
     // AssemblyAI keys are 32-char hex-ish strings, no required prefix
     if (apiKey.length < 20) {
       try { fs.unlinkSync(req.file.path); } catch {}
       return res.status(401).json({ error: "That key doesn't look right for AssemblyAI." });
     }
-    return startAssemblyJob(req, res, apiKey, language);
+    return startAssemblyJob(req, res, apiKey, language, keyterms);
   }
 
   // OpenAI Whisper path (existing behavior)
@@ -253,6 +257,7 @@ app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
     progress: 0,
     transcript: '',
     utterances: null, // diarized output (AssemblyAI only)
+    segments: null,   // [{start,end,text}] timestamped segments (Whisper)
     error: null,
     chunkInfo: { current: 0, total: 0, usedSilence: 0 },
     duration: null,
@@ -263,6 +268,7 @@ app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
     silences: [],
     pathTaken: '',   // 'direct' | 'split-only' | 'full'
     language,
+    keyterms,
     createdAt: Date.now(),
     apiKey,
   };
@@ -284,7 +290,7 @@ app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
 // Flow: upload bytes -> submit transcript with speaker_labels -> poll until done.
 // ============================================================================
 
-function startAssemblyJob(req, res, apiKey, language) {
+function startAssemblyJob(req, res, apiKey, language, keyterms) {
   const jobId = crypto.randomBytes(12).toString('hex');
   const job = {
     id: jobId,
@@ -304,6 +310,7 @@ function startAssemblyJob(req, res, apiKey, language) {
     chunkInfo: { current: 0, total: 0, usedSilence: 0 },
     pathTaken: 'assemblyai',
     language: language || '',
+    keyterms: keyterms || '',
     createdAt: Date.now(),
     apiKey,
     assemblyTranscriptId: null,
@@ -372,6 +379,12 @@ async function processAssemblyJob(job) {
     // to en_us, which would mangle non-English audio.
     submitBody.language_detection = true;
   }
+  if (job.keyterms) {
+    // word_boost biases recognition toward supplied terms (names, jargon).
+    // Split on commas/newlines, trim, drop empties, cap the list size.
+    submitBody.word_boost = job.keyterms
+      .split(/[,\n]/).map(s => s.trim()).filter(Boolean).slice(0, 100);
+  }
 
   const submitRes = await fetch('https://api.assemblyai.com/v2/transcript', {
     method: 'POST',
@@ -419,6 +432,14 @@ async function processAssemblyJob(job) {
             text: u.text || '',
             start_ms: typeof u.start === 'number' ? u.start : 0,
             end_ms: typeof u.end === 'number' ? u.end : 0,
+            confidence: typeof u.confidence === 'number' ? u.confidence : null,
+            // Per-word confidence lets the client highlight uncertain words.
+            words: Array.isArray(u.words)
+              ? u.words.map(w => ({
+                  text: w.text || '',
+                  confidence: typeof w.confidence === 'number' ? w.confidence : null,
+                }))
+              : null,
           }))
         : [];
       job.utterances = utterances;
@@ -474,6 +495,7 @@ app.get('/api/jobs/:id', jobsLimiter, (req, res) => {
     progress: job.progress,
     transcript: job.transcript,
     utterances: job.utterances,
+    segments: job.segments || null,
     error: job.error,
     chunkInfo: job.chunkInfo,
     duration: job.duration,
@@ -533,7 +555,9 @@ async function processJob(job) {
       job.stage = 'transcribing';
       job.message = 'Transcribing (fast path)';
       job.chunkInfo = { current: 1, total: 1, usedSilence: 0 };
-      job.transcript = await transcribeFile(job.inputPath, job.apiKey, job.language);
+      const r = await transcribeFile(job.inputPath, job.apiKey, job.language, job.keyterms);
+      job.transcript = r.text;
+      job.segments = r.segments;
       job.progress = 1;
       job.status = 'done';
       job.stage  = 'done';
@@ -542,6 +566,7 @@ async function processJob(job) {
     }
 
     let mediaPath;
+    let splitPoints = [];
 
     if (isCompressed) {
       // PATH B: already compressed — detect silences only, then split with -c copy
@@ -561,30 +586,41 @@ async function processJob(job) {
 
     // Decide chunks
     let chunkPaths;
+    let chunkOffsets; // start time (seconds) of each chunk within the original
     if (job.duration <= MAX_CHUNK) {
       chunkPaths = [mediaPath];
+      chunkOffsets = [0];
       job.chunkInfo = { current: 0, total: 1, usedSilence: 0 };
     } else {
       job.stage = 'splitting';
       job.message = 'Splitting at silence boundaries';
-      const splitPoints = pickSplitPoints(job.silences, job.duration);
+      splitPoints = pickSplitPoints(job.silences, job.duration);
       const silenceAligned = splitPoints.filter(
         t => job.silences.some(s => Math.abs(s.mid - t) < 0.01)
       ).length;
       chunkPaths = await splitAudio(mediaPath, splitPoints, job.workDir, ext);
+      // Chunk i starts at splitPoints[i-1] (chunk 0 starts at 0). These are
+      // the offsets we add to each chunk's segment timestamps so they line
+      // up with the original audio timeline.
+      chunkOffsets = [0, ...splitPoints];
       job.chunkInfo = { current: 0, total: chunkPaths.length, usedSilence: silenceAligned };
     }
 
     // Transcribe chunks sequentially
     job.stage = 'transcribing';
     let combined = '';
+    job.segments = [];
     for (let i = 0; i < chunkPaths.length; i++) {
       job.chunkInfo = { ...job.chunkInfo, current: i + 1 };
       job.progress = 0.5 + (i / chunkPaths.length) * 0.5;
       job.message = `Transcribing chunk ${i + 1} of ${chunkPaths.length}`;
-      const text = await transcribeFile(chunkPaths[i], job.apiKey, job.language);
-      combined = combined ? `${combined} ${text}` : text;
+      const r = await transcribeFile(chunkPaths[i], job.apiKey, job.language, job.keyterms);
+      combined = combined ? `${combined} ${r.text}` : r.text;
       job.transcript = combined;
+      const off = chunkOffsets[i] || 0;
+      for (const seg of r.segments) {
+        job.segments.push({ start: seg.start + off, end: seg.end + off, text: seg.text });
+      }
     }
 
     job.status = 'done';
@@ -825,20 +861,34 @@ function splitAudio(inputPath, splitPoints, workDir, srcExt) {
 // "Could not parse multipart form" errors.
 // ============================================================================
 
-async function transcribeFile(filePath, apiKey, language) {
+async function transcribeFile(filePath, apiKey, language, keyterms) {
   const client = new OpenAI({ apiKey });
   try {
     const params = {
       file: fs.createReadStream(filePath),
       model: 'whisper-1',
-      response_format: 'text',
+      // verbose_json gives us segment-level timestamps (start/end seconds)
+      // in addition to the text — needed for SRT/VTT export and synced
+      // playback. Falls back gracefully if segments are absent.
+      response_format: 'verbose_json',
     };
     // Whisper auto-detects language by default; passing a hint when the
     // user has explicitly chosen one skips that step and slightly improves
     // accuracy, especially for low-resource languages.
     if (language) params.language = language;
+    // The prompt biases Whisper toward specific spellings — names, jargon,
+    // acronyms. Capped to stay well under the 224-token prompt limit.
+    if (keyterms) params.prompt = keyterms.slice(0, 800);
     const result = await client.audio.transcriptions.create(params);
-    return (typeof result === 'string' ? result : (result && result.text) || '').trim();
+    const text = (result && result.text || '').trim();
+    const segments = Array.isArray(result.segments)
+      ? result.segments.map(s => ({
+          start: typeof s.start === 'number' ? s.start : 0,
+          end: typeof s.end === 'number' ? s.end : 0,
+          text: (s.text || '').trim(),
+        }))
+      : [];
+    return { text, segments };
   } catch (e) {
     // Surface OpenAI's own error message when possible
     const msg = (e && (e.message || (e.error && e.error.message))) || String(e);
