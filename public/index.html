@@ -1253,34 +1253,42 @@
     .history-item-del:hover { color: var(--error); border-color: var(--error); }
     .history-note { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--fg-faint); margin-top: 0.85rem; }
     /* AI extras */
-    .ai-extras { margin-top: 1.25rem; padding-top: 1.1rem; border-top: 1px solid var(--border); }
-    .ai-extras-head { display: flex; flex-direction: column; gap: 0.2rem; margin-bottom: 0.85rem; }
-    .ai-extras-title { font-family: var(--font-sans); font-size: 14px; font-weight: 600; color: var(--fg); }
-    .ai-extras-note { font-family: var(--font-sans); font-size: 12px; color: var(--fg-muted); }
+    .ai-extras { padding: 1.25rem 1.5rem; }
+    .ai-extras-head { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.9rem; }
+    .ai-extras-title { font-family: var(--font-sans); font-size: 14px; font-weight: 600; color: var(--fg); display: inline-flex; align-items: center; gap: 0.5rem; }
+    .ai-extras-badge { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--cta); border: 1px solid var(--cta); border-radius: 999px; padding: 0.1rem 0.45rem; font-weight: 400; }
+    .ai-extras-note { font-family: var(--font-sans); font-size: 12.5px; color: var(--fg-muted); line-height: 1.45; }
     .ai-extras-options { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
-    /* Toggle pills */
+    /* Checkbox-style toggle pills */
     .ai-pill {
-      display: inline-flex; align-items: center; gap: 0.5rem;
-      padding: 0.5rem 0.9rem;
+      display: inline-flex; align-items: center; gap: 0.55rem;
+      padding: 0.55rem 1rem 0.55rem 0.75rem;
       background: var(--bg-input);
-      border: 1px solid var(--border-strong); border-radius: 999px;
+      border: 1px solid var(--border-strong); border-radius: 10px;
       cursor: pointer; user-select: none;
-      font-family: var(--font-sans); font-size: 13.5px; color: var(--fg-muted);
-      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      font-family: var(--font-sans); font-size: 14px; color: var(--fg);
+      transition: background 0.15s, border-color 0.15s;
     }
-    .ai-pill:hover { border-color: var(--accent); color: var(--fg); }
+    .ai-pill:hover { border-color: var(--cta); background: rgba(0,108,190,0.06); }
     .ai-pill input { position: absolute; opacity: 0; width: 0; height: 0; }
-    .ai-pill-icon { color: var(--fg-faint); transition: color 0.15s; flex-shrink: 0; }
-    .ai-pill-check { color: var(--fg); opacity: 0; width: 0; transition: opacity 0.15s; margin-left: -0.2rem; }
-    .ai-pill:has(input:checked) {
-      background: var(--cta); border-color: var(--cta); color: #fff;
+    .ai-pill-box {
+      width: 18px; height: 18px; flex-shrink: 0;
+      border: 2px solid var(--border-strong); border-radius: 5px;
+      position: relative; transition: background 0.15s, border-color 0.15s;
     }
-    .ai-pill:has(input:checked) .ai-pill-icon { color: rgba(255,255,255,0.85); }
-    .ai-pill:has(input:checked) .ai-pill-check { opacity: 1; width: 15px; }
+    .ai-pill:hover .ai-pill-box { border-color: var(--cta); }
+    .ai-pill:has(input:checked) { background: rgba(0,108,190,0.1); border-color: var(--cta); }
+    .ai-pill:has(input:checked) .ai-pill-box { background: var(--cta); border-color: var(--cta); }
+    .ai-pill:has(input:checked) .ai-pill-box::after {
+      content: ''; position: absolute; left: 4px; top: 0.5px;
+      width: 5px; height: 10px; border: solid #fff; border-width: 0 2.5px 2.5px 0;
+      transform: rotate(45deg);
+    }
     .ai-pill:has(input:focus-visible) { box-shadow: 0 0 0 3px rgba(0,108,190,0.3); }
+    .ai-pill-label { line-height: 1; }
     .ai-translate-lang {
       padding: 0.5rem 0.7rem; background: var(--bg-input);
-      border: 1px solid var(--border-strong); border-radius: 8px; color: var(--fg);
+      border: 1px solid var(--border-strong); border-radius: 10px; color: var(--fg);
       font-family: var(--font-sans); font-size: 13px; cursor: pointer;
     }
     .ai-translate-lang:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -1304,6 +1312,7 @@
     .ai-status-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--cta), var(--accent)); border-radius: 2px; transition: width 0.4s ease; }
     .ai-block { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1.1rem 1.25rem; }
     .ai-block-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem; }
+    .ai-block-actions { display: flex; gap: 0.4rem; }
     .ai-block-head .mono-sm { color: var(--cta); }
     .ai-copy { background: transparent; border: 1px solid var(--border); border-radius: 4px; color: var(--fg-muted); font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; padding: 0.25rem 0.5rem; cursor: pointer; transition: color 0.15s, border-color 0.15s; }
     .ai-copy:hover { color: var(--fg); border-color: var(--accent); }
@@ -2005,27 +2014,24 @@
         <!-- AI extras (optional, OpenAI key required) -->
         <div id="ai-extras" class="ai-extras hidden">
           <div class="ai-extras-head">
-            <span class="ai-extras-title">AI extras</span>
-            <span class="ai-extras-note">Optional · runs after transcription · uses your OpenAI credits</span>
+            <span class="ai-extras-title">AI extras <span class="ai-extras-badge">optional</span></span>
+            <span class="ai-extras-note">Select one or more — they run automatically after transcription, using your OpenAI credits.</span>
           </div>
           <div class="ai-extras-options">
             <label class="ai-pill">
               <input type="checkbox" id="opt-summary">
-              <svg class="ai-pill-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+              <span class="ai-pill-box"></span>
               <span class="ai-pill-label">Summary</span>
-              <svg class="ai-pill-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </label>
             <label class="ai-pill">
               <input type="checkbox" id="opt-actions">
-              <svg class="ai-pill-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              <span class="ai-pill-box"></span>
               <span class="ai-pill-label">Action items</span>
-              <svg class="ai-pill-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </label>
             <label class="ai-pill">
               <input type="checkbox" id="opt-translate">
-              <svg class="ai-pill-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg>
+              <span class="ai-pill-box"></span>
               <span class="ai-pill-label">Translate</span>
-              <svg class="ai-pill-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
             </label>
             <select id="opt-translate-lang" class="ai-translate-lang" aria-label="Translation target language" disabled>
               <option value="English">English</option>
@@ -2160,7 +2166,13 @@
             <ul id="ai-actions-list" class="ai-block-list"></ul>
           </div>
           <div id="ai-translation-block" class="ai-block hidden">
-            <div class="ai-block-head"><span class="mono-sm" id="ai-translation-label">Translation</span><button class="ai-copy" data-target="ai-translation-text" type="button">Copy</button></div>
+            <div class="ai-block-head">
+              <span class="mono-sm" id="ai-translation-label">Translation</span>
+              <div class="ai-block-actions">
+                <button id="ai-translation-download" class="ai-copy" type="button">Download .txt</button>
+                <button class="ai-copy" data-target="ai-translation-text" type="button">Copy</button>
+              </div>
+            </div>
             <p id="ai-translation-text" class="ai-block-text"></p>
           </div>
         </div>
@@ -3305,7 +3317,7 @@
     }
 
     // Copy buttons for AI result blocks
-    document.querySelectorAll('.ai-copy').forEach(btn => {
+    document.querySelectorAll('.ai-copy[data-target]').forEach(btn => {
       btn.addEventListener('click', async () => {
         const target = $(btn.dataset.target);
         if (!target) return;
@@ -3315,6 +3327,20 @@
         try { await navigator.clipboard.writeText(text); } catch {}
         const old = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => btn.textContent = old, 1500);
       });
+    });
+    // Download the translated transcript with a language-specific name
+    $('ai-translation-download').addEventListener('click', () => {
+      const text = $('ai-translation-text').textContent || '';
+      if (!text.trim()) return;
+      const lang = (($('ai-translation-label').textContent.match(/\(([^)]+)\)/) || [])[1] || 'translation')
+        .toLowerCase().replace(/[^a-z0-9]+/g, '-');
+      const base = (state.file?.name || 'transcript').replace(/\.[^.]+$/, '');
+      const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${base}-${lang}.txt`;
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
 
     $('history-clear').addEventListener('click', () => {

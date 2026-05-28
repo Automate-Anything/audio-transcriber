@@ -542,19 +542,34 @@ app.post('/api/post-process', postProcessLimiter, express.json({ limit: '4mb' })
 
     if (wantSummary || wantActions) {
       const fields = [];
-      if (wantSummary) fields.push('"summary": a concise prose summary (3-6 sentences) of the key points');
-      if (wantActions) fields.push('"actionItems": an array of clear action item strings (empty array if none)');
-      const sys = 'You are a precise meeting/transcript assistant. Respond with a single JSON object and nothing else.';
+      if (wantSummary) fields.push(
+        '"summary": a thorough summary written as 2-4 short paragraphs (not bullet points). ' +
+        'Open with one sentence stating what the conversation was and who was involved, then cover the ' +
+        'main topics discussed, any decisions or conclusions reached, points of disagreement or open ' +
+        'questions, and notable details, context, numbers, names, or examples that came up. Be specific ' +
+        'and substantive — capture the actual content, not vague generalities. Aim for real depth while ' +
+        'staying readable.'
+      );
+      if (wantActions) fields.push(
+        '"actionItems": an array of concrete next steps that were stated or clearly implied. Each item is ' +
+        'one specific, actionable string phrased as an imperative (start with a verb), self-contained enough ' +
+        'to understand on its own. Where the transcript makes it clear, include who is responsible and any ' +
+        'deadline or condition. Capture follow-ups, commitments, things to research, build, send, fix, or ' +
+        'decide. Do not invent tasks that were not discussed. Return an empty array if there genuinely are none.'
+      );
+      const sys = 'You are a precise meeting/transcript analyst. You read carefully and capture specifics — ' +
+        'names, numbers, decisions, and concrete next steps — rather than generic summaries. Respond with a ' +
+        'single JSON object and nothing else.';
       const prompt =
-        `From the transcript below, produce a JSON object with these fields:\n` +
+        `Analyze the transcript below and produce a JSON object with these fields:\n` +
         fields.map(f => '- ' + f).join('\n') +
         `\n\nReturn only valid JSON. Transcript:\n"""\n${text}\n"""`;
       const completion = await client.chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [{ role: 'system', content: sys }, { role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
-        max_tokens: 1200,
-        temperature: 0.3,
+        max_tokens: 2000,
+        temperature: 0.4,
       });
       let parsed = {};
       try { parsed = JSON.parse(completion.choices[0].message.content); } catch {}
