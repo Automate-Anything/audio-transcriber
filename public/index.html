@@ -753,6 +753,17 @@
       box-shadow: 0 0 16px var(--error);
       animation: recPulse 1.1s ease-in-out infinite;
     }
+    .recording-panel.paused .rec-state-dot {
+      animation: none;
+      background: var(--fg-muted);
+      box-shadow: 0 0 8px rgba(148, 163, 184, 0.4);
+    }
+    .recording-panel.paused .rec-state-label {
+      color: var(--fg-muted);
+    }
+    .recording-panel.paused .rec-state-time {
+      color: var(--fg-muted);
+    }
     @keyframes recPulse {
       0%, 100% { opacity: 1; transform: scale(1); }
       50% { opacity: 0.45; transform: scale(0.78); }
@@ -1619,11 +1630,12 @@
       <!-- Recording panel (mic active) -->
       <div id="recording-panel" class="panel hidden recording-panel">
         <div class="rec-state">
-          <div class="rec-state-label mono-sm">Recording</div>
+          <div class="rec-state-label mono-sm" id="rec-state-label">Recording</div>
           <div class="rec-state-time" id="rec-time">0:00</div>
           <div class="rec-state-dot" aria-hidden="true"></div>
         </div>
         <div class="rec-state-actions">
+          <button id="rec-pause-btn" type="button" class="btn">Pause</button>
           <button id="rec-stop-btn" type="button" class="btn primary">Stop &amp; save</button>
           <button id="rec-cancel-btn" type="button" class="btn">Cancel</button>
         </div>
@@ -2722,6 +2734,7 @@
       chunks: [],         // collected Blob chunks during recording
       mime: '',           // mime type the recorder chose
       startedAt: 0,
+      pausedAt: 0,        // timestamp when paused; 0 when actively recording
       timerHandle: null,
       blob: null,         // final recording blob
       blobUrl: null,      // object URL for the audio element
@@ -2818,7 +2831,11 @@
       });
 
       rec.startedAt = Date.now();
+      rec.pausedAt = 0;
       $('rec-time').textContent = '0:00';
+      $('recording-panel').classList.remove('paused');
+      $('rec-state-label').textContent = 'Recording';
+      $('rec-pause-btn').textContent = 'Pause';
       startRecTimer();
       // 1-second timeslice so chunks arrive while recording and the final
       // blob assembly is deterministic
@@ -2836,6 +2853,45 @@
     }
     function stopRecTimer() {
       if (rec.timerHandle) { clearInterval(rec.timerHandle); rec.timerHandle = null; }
+    }
+
+    function pauseRecording() {
+      if (!rec.recorder || rec.recorder.state !== 'recording') return;
+      try { rec.recorder.pause(); } catch (e) {
+        showRecError('Could not pause: ' + (e && e.message ? e.message : 'unknown error'));
+        return;
+      }
+      // Remember when we paused so we can shift startedAt forward on resume —
+      // that way the elapsed time we display doesn't count the paused interval.
+      rec.pausedAt = Date.now();
+      stopRecTimer();
+      $('recording-panel').classList.add('paused');
+      $('rec-state-label').textContent = 'Paused';
+      $('rec-pause-btn').textContent = 'Resume';
+    }
+
+    function resumeRecording() {
+      if (!rec.recorder || rec.recorder.state !== 'paused') return;
+      // Shift startedAt forward by the duration we were paused, so the timer
+      // resumes from where it left off instead of jumping ahead.
+      if (rec.pausedAt) {
+        rec.startedAt += (Date.now() - rec.pausedAt);
+        rec.pausedAt = 0;
+      }
+      try { rec.recorder.resume(); } catch (e) {
+        showRecError('Could not resume: ' + (e && e.message ? e.message : 'unknown error'));
+        return;
+      }
+      startRecTimer();
+      $('recording-panel').classList.remove('paused');
+      $('rec-state-label').textContent = 'Recording';
+      $('rec-pause-btn').textContent = 'Pause';
+    }
+
+    function togglePauseRecording() {
+      if (!rec.recorder) return;
+      if (rec.recorder.state === 'recording') pauseRecording();
+      else if (rec.recorder.state === 'paused') resumeRecording();
     }
 
     function teardownStream() {
@@ -3093,6 +3149,7 @@
     // Wire record + playback buttons
     // ============================================================================
     $('record-start-btn').addEventListener('click', startRecording);
+    $('rec-pause-btn').addEventListener('click', togglePauseRecording);
     $('rec-stop-btn').addEventListener('click', stopRecording);
     $('rec-cancel-btn').addEventListener('click', cancelRecording);
     $('pb-use-btn').addEventListener('click', useRecordingAsFile);
