@@ -1141,6 +1141,15 @@
     }
     .tx-search:focus { outline: none; border-color: var(--cta); box-shadow: 0 0 0 3px rgba(0,108,190,0.2); }
     .tx-search-count { font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); white-space: nowrap; }
+    .tx-search-nav { display: flex; gap: 0.25rem; }
+    .tx-search-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; flex-shrink: 0;
+      background: var(--bg-input); border: 1px solid var(--border-strong);
+      border-radius: 5px; color: var(--fg-muted); cursor: pointer;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .tx-search-btn:hover { color: var(--fg); border-color: var(--cta); background: rgba(0,108,190,0.1); }
     .tx-search-hit { background: rgba(245, 200, 66, 0.25); border-radius: 2px; }
     .tx-search-hit.current { background: rgba(245, 200, 66, 0.6); color: #1a1a1a; }
     /* Synced player */
@@ -1199,6 +1208,19 @@
     }
     .tx-body.editing { background: var(--bg-alt); }
     .edit-hint { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--cta); padding: 0 1.5rem 0.5rem; }
+    /* Floating "Done editing" bar — fixed so it's reachable no matter where
+       you've scrolled within a long transcript. */
+    .edit-floating-bar {
+      position: fixed; left: 50%; bottom: 1.25rem; transform: translateX(-50%);
+      z-index: 80; display: flex; align-items: center; gap: 1rem;
+      padding: 0.7rem 0.8rem 0.7rem 1.25rem;
+      background: var(--bg-card); border: 1px solid var(--cta);
+      border-radius: 999px; box-shadow: 0 8px 30px rgba(0,0,0,0.45);
+      max-width: calc(100vw - 2rem);
+    }
+    .edit-floating-text { font-family: var(--font-sans); font-size: 13px; color: var(--fg-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .edit-floating-done { border-radius: 999px; padding: 0.45rem 1.4rem; flex-shrink: 0; }
+    @media (max-width: 480px) { .edit-floating-text { font-size: 12px; } }
     /* History */
     .history-section { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
     .history-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.85rem; }
@@ -1231,25 +1253,55 @@
     .history-item-del:hover { color: var(--error); border-color: var(--error); }
     .history-note { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--fg-faint); margin-top: 0.85rem; }
     /* AI extras */
-    .ai-extras { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
-    .ai-extras-head { color: var(--fg-soft); margin-bottom: 0.7rem; }
-    .ai-extras-note { color: var(--fg-faint); text-transform: none; letter-spacing: 0.05em; }
-    .ai-extras-options { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
-    .ai-check { display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer; font-family: var(--font-sans); font-size: 14px; color: var(--fg); }
-    .ai-check input { width: 16px; height: 16px; accent-color: var(--cta); cursor: pointer; }
+    .ai-extras { margin-top: 1.25rem; padding-top: 1.1rem; border-top: 1px solid var(--border); }
+    .ai-extras-head { display: flex; flex-direction: column; gap: 0.2rem; margin-bottom: 0.85rem; }
+    .ai-extras-title { font-family: var(--font-sans); font-size: 14px; font-weight: 600; color: var(--fg); }
+    .ai-extras-note { font-family: var(--font-sans); font-size: 12px; color: var(--fg-muted); }
+    .ai-extras-options { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+    /* Toggle pills */
+    .ai-pill {
+      display: inline-flex; align-items: center; gap: 0.5rem;
+      padding: 0.5rem 0.9rem;
+      background: var(--bg-input);
+      border: 1px solid var(--border-strong); border-radius: 999px;
+      cursor: pointer; user-select: none;
+      font-family: var(--font-sans); font-size: 13.5px; color: var(--fg-muted);
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .ai-pill:hover { border-color: var(--accent); color: var(--fg); }
+    .ai-pill input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .ai-pill-icon { color: var(--fg-faint); transition: color 0.15s; flex-shrink: 0; }
+    .ai-pill-check { color: var(--fg); opacity: 0; width: 0; transition: opacity 0.15s; margin-left: -0.2rem; }
+    .ai-pill:has(input:checked) {
+      background: var(--cta); border-color: var(--cta); color: #fff;
+    }
+    .ai-pill:has(input:checked) .ai-pill-icon { color: rgba(255,255,255,0.85); }
+    .ai-pill:has(input:checked) .ai-pill-check { opacity: 1; width: 15px; }
+    .ai-pill:has(input:focus-visible) { box-shadow: 0 0 0 3px rgba(0,108,190,0.3); }
     .ai-translate-lang {
-      padding: 0.35rem 0.6rem; background: var(--bg-input);
-      border: 1px solid var(--border-strong); border-radius: 4px; color: var(--fg);
+      padding: 0.5rem 0.7rem; background: var(--bg-input);
+      border: 1px solid var(--border-strong); border-radius: 8px; color: var(--fg);
       font-family: var(--font-sans); font-size: 13px; cursor: pointer;
     }
-    .ai-translate-lang:disabled { opacity: 0.45; cursor: not-allowed; }
+    .ai-translate-lang:disabled { opacity: 0.4; cursor: not-allowed; }
     .ai-results { margin-top: 1rem; display: flex; flex-direction: column; gap: 1rem; }
     .ai-results-status {
-      padding: 0.6rem 0.9rem; border-radius: 6px;
-      background: rgba(0,108,190,0.08); border: 1px solid var(--border); border-left: 2px solid var(--cta);
-      font-family: var(--font-mono); font-size: 12px; color: var(--fg-soft);
+      padding: 0.85rem 1rem; border-radius: 8px;
+      background: var(--bg-card); border: 1px solid var(--border);
     }
-    .ai-results-status.error { background: rgba(239,68,68,0.08); border-color: var(--error); border-left-color: var(--error); color: var(--error); }
+    .ai-results-status.error { background: rgba(239,68,68,0.08); border-color: var(--error); }
+    .ai-status-row { display: flex; align-items: center; gap: 0.6rem; }
+    .ai-status-spinner {
+      width: 15px; height: 15px; flex-shrink: 0;
+      border: 2px solid var(--border-strong); border-top-color: var(--cta);
+      border-radius: 50%; animation: ai-spin 0.7s linear infinite;
+    }
+    @keyframes ai-spin { to { transform: rotate(360deg); } }
+    .ai-status-text { font-family: var(--font-sans); font-size: 13px; color: var(--fg-soft); }
+    .ai-results-status.error .ai-status-text { color: var(--error); }
+    .ai-status-eta { font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); margin-left: auto; white-space: nowrap; }
+    .ai-status-bar { height: 4px; background: var(--border-strong); border-radius: 2px; margin-top: 0.7rem; overflow: hidden; }
+    .ai-status-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--cta), var(--accent)); border-radius: 2px; transition: width 0.4s ease; }
     .ai-block { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1.1rem 1.25rem; }
     .ai-block-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem; }
     .ai-block-head .mono-sm { color: var(--cta); }
@@ -1952,11 +2004,29 @@
 
         <!-- AI extras (optional, OpenAI key required) -->
         <div id="ai-extras" class="ai-extras hidden">
-          <div class="ai-extras-head mono-sm">AI extras <span class="ai-extras-note">— optional, uses your OpenAI credits</span></div>
+          <div class="ai-extras-head">
+            <span class="ai-extras-title">AI extras</span>
+            <span class="ai-extras-note">Optional · runs after transcription · uses your OpenAI credits</span>
+          </div>
           <div class="ai-extras-options">
-            <label class="ai-check"><input type="checkbox" id="opt-summary"> <span>Summary</span></label>
-            <label class="ai-check"><input type="checkbox" id="opt-actions"> <span>Action items</span></label>
-            <label class="ai-check"><input type="checkbox" id="opt-translate"> <span>Translate to</span></label>
+            <label class="ai-pill">
+              <input type="checkbox" id="opt-summary">
+              <svg class="ai-pill-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+              <span class="ai-pill-label">Summary</span>
+              <svg class="ai-pill-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </label>
+            <label class="ai-pill">
+              <input type="checkbox" id="opt-actions">
+              <svg class="ai-pill-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+              <span class="ai-pill-label">Action items</span>
+              <svg class="ai-pill-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </label>
+            <label class="ai-pill">
+              <input type="checkbox" id="opt-translate">
+              <svg class="ai-pill-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 8l6 6"/><path d="M4 14l6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="M22 22l-5-10-5 10"/><path d="M14 18h6"/></svg>
+              <span class="ai-pill-label">Translate</span>
+              <svg class="ai-pill-check" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+            </label>
             <select id="opt-translate-lang" class="ai-translate-lang" aria-label="Translation target language" disabled>
               <option value="English">English</option>
               <option value="Hebrew">Hebrew</option>
@@ -2042,6 +2112,14 @@
           <div id="tx-search-row" class="tx-search-row hidden">
             <input id="tx-search" class="tx-search" type="search" placeholder="Search transcript…" aria-label="Search transcript">
             <span id="tx-search-count" class="tx-search-count"></span>
+            <div id="tx-search-nav" class="tx-search-nav hidden">
+              <button id="tx-search-prev" class="tx-search-btn" type="button" aria-label="Previous match" title="Previous (Shift+Enter)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+              </button>
+              <button id="tx-search-next" class="tx-search-btn" type="button" aria-label="Next match" title="Next (Enter)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+              </button>
+            </div>
           </div>
           <div id="sync-player" class="sync-player hidden">
             <button id="sync-play" class="sync-play" type="button" aria-label="Play">
@@ -2065,7 +2143,14 @@
 
         <!-- AI extras results -->
         <div id="ai-results" class="ai-results hidden">
-          <div id="ai-results-status" class="ai-results-status hidden"></div>
+          <div id="ai-results-status" class="ai-results-status hidden">
+            <div class="ai-status-row">
+              <span id="ai-status-spinner" class="ai-status-spinner"></span>
+              <span id="ai-status-text" class="ai-status-text"></span>
+              <span id="ai-status-eta" class="ai-status-eta"></span>
+            </div>
+            <div id="ai-status-bar" class="ai-status-bar"><div id="ai-status-fill" class="ai-status-fill"></div></div>
+          </div>
           <div id="ai-summary-block" class="ai-block hidden">
             <div class="ai-block-head"><span class="mono-sm">Summary</span><button class="ai-copy" data-target="ai-summary-text" type="button">Copy</button></div>
             <p id="ai-summary-text" class="ai-block-text"></p>
@@ -2093,6 +2178,12 @@
 
     </div>
   </main>
+
+  <!-- Floating save bar while editing the transcript (always visible) -->
+  <div id="edit-floating-bar" class="edit-floating-bar hidden">
+    <span class="edit-floating-text">Editing — tap Done to save your changes</span>
+    <button id="edit-done-floating" class="btn primary edit-floating-done" type="button">Done</button>
+  </div>
 
   <!-- ===== Advanced setup modal ===== -->
   <div id="advanced-modal" class="modal-overlay hidden">
@@ -2857,7 +2948,10 @@
         if (state.showConfidence && Array.isArray(u.words) && u.words.length) {
           for (let wi = 0; wi < u.words.length; wi++) {
             const w = u.words[wi];
-            if (w.confidence != null && w.confidence < 0.5) {
+            // 0.4 threshold: AssemblyAI scores many perfectly-correct words
+            // in the 0.5-0.8 range, so a higher cutoff produces lots of false
+            // flags. Only genuinely uncertain words tend to fall below 0.4.
+            if (w.confidence != null && w.confidence < 0.4) {
               const span = document.createElement('span');
               span.className = 'lc-word';
               span.textContent = w.text;
@@ -3106,11 +3200,36 @@
       $('opt-translate-lang').disabled = !e.target.checked;
     });
 
-    function aiResultsStatus(msg, isError) {
+    // Drives the animated progress bar toward `target`% over an estimated
+    // duration. We can't get real progress from a single OpenAI call, so we
+    // ease toward 90% over the estimate, then jump to 100% on completion.
+    let aiProgressTimer = null;
+    function startAiProgress(estimateSec) {
+      stopAiProgress();
+      const start = Date.now();
+      const fill = $('ai-status-fill');
+      const etaEl = $('ai-status-eta');
+      aiProgressTimer = setInterval(() => {
+        const elapsed = (Date.now() - start) / 1000;
+        // Asymptotic approach to 90% so it never "finishes" before the response
+        const pct = Math.min(90, (1 - Math.exp(-elapsed / (estimateSec * 0.5))) * 100);
+        fill.style.width = pct + '%';
+        const remain = Math.max(0, Math.ceil(estimateSec - elapsed));
+        etaEl.textContent = remain > 0 ? `~${remain}s` : 'almost done…';
+      }, 250);
+    }
+    function stopAiProgress() {
+      if (aiProgressTimer) { clearInterval(aiProgressTimer); aiProgressTimer = null; }
+    }
+    function aiStatus(msg, isError) {
       const el = $('ai-results-status');
       el.classList.remove('hidden');
       el.classList.toggle('error', !!isError);
-      el.textContent = msg;
+      $('ai-status-text').textContent = msg;
+      // On error: stop the spinner/bar and clear the ETA
+      $('ai-status-spinner').style.display = isError ? 'none' : '';
+      $('ai-status-bar').style.display = isError ? 'none' : '';
+      if (isError) { stopAiProgress(); $('ai-status-eta').textContent = ''; }
     }
 
     async function runPostProcessing() {
@@ -3125,8 +3244,21 @@
         ? diarizedToText() : state.transcript;
       if (!transcript.trim()) return;
 
+      // Estimate: summary/actions are quick; translation scales with length
+      // (it re-emits the whole transcript). Rough but gives a sensible ETA.
+      const words = transcript.split(/\s+/).filter(Boolean).length;
+      let est = 4;
+      if (tasks.includes('summary') || tasks.includes('actions')) est += 6;
+      if (tasks.includes('translate')) est += Math.max(8, Math.round(words / 60));
+      est = Math.min(est, 90);
+
       $('ai-results').classList.remove('hidden');
-      aiResultsStatus('Generating ' + tasks.map(t => t === 'actions' ? 'action items' : t).join(' + ') + '…', false);
+      $('ai-status-spinner').style.display = '';
+      $('ai-status-bar').style.display = '';
+      $('ai-status-fill').style.width = '0%';
+      const label = tasks.map(t => t === 'actions' ? 'action items' : t === 'translate' ? 'translation' : t).join(' + ');
+      aiStatus('Generating ' + label + '…', false);
+      startAiProgress(est);
 
       try {
         const resp = await fetch(`${apiBase()}/api/post-process`, {
@@ -3141,7 +3273,10 @@
         const data = await resp.json();
         if (!resp.ok) throw new Error(data.error || 'Request failed.');
 
-        $('ai-results-status').classList.add('hidden');
+        // Snap to 100% briefly, then hide the status
+        stopAiProgress();
+        $('ai-status-fill').style.width = '100%';
+        setTimeout(() => $('ai-results-status').classList.add('hidden'), 350);
 
         // Summary
         if (data.summary != null) {
@@ -3165,7 +3300,7 @@
           $('ai-translation-text').textContent = data.translation;
         }
       } catch (e) {
-        aiResultsStatus(e.message || 'Post-processing failed.', true);
+        aiStatus(e.message || 'Post-processing failed.', true);
       }
     }
 
@@ -4056,14 +4191,30 @@
     });
 
     // ---- Export menu ----
+    // Subtitle formats (.srt/.vtt) only make sense for video — hide them for
+    // audio-only sources. Detect via the file's mime type or extension.
+    function isVideoSource() {
+      const f = state.file;
+      if (!f) return false;
+      if (f.type && f.type.startsWith('video/')) return true;
+      const name = (f.name || '').toLowerCase();
+      return /\.(mp4|mov|webm|mkv|avi|m4v|mpg|mpeg|wmv|flv|ogv)$/.test(name);
+    }
     function toggleExportMenu(open) {
       const menu = $('export-menu');
       const willOpen = open != null ? open : menu.classList.contains('hidden');
       menu.classList.toggle('hidden', !willOpen);
       $('export-btn').setAttribute('aria-expanded', String(willOpen));
-      // Disable timestamp-dependent items when no timestamps exist
       const ts = hasTimestamps();
-      menu.querySelectorAll('[data-fmt="txt-ts"],[data-fmt="srt"],[data-fmt="vtt"]').forEach(el => {
+      const video = isVideoSource();
+      // Timestamped text: available whenever we have timing data.
+      menu.querySelectorAll('[data-fmt="txt-ts"]').forEach(el => {
+        el.disabled = !ts;
+        el.title = ts ? '' : 'No timestamps available for this transcript';
+      });
+      // Subtitles/captions: only relevant for video. Hide entirely for audio.
+      menu.querySelectorAll('[data-fmt="srt"],[data-fmt="vtt"]').forEach(el => {
+        el.classList.toggle('hidden', !video);
         el.disabled = !ts;
         el.title = ts ? '' : 'No timestamps available for this transcript';
       });
@@ -4092,6 +4243,7 @@
       const diarized = Array.isArray(state.utterances) && state.utterances.length > 0;
       $('edit-btn').textContent = on ? 'Done' : 'Edit';
       $('edit-btn').classList.toggle('active', on);
+      $('edit-floating-bar').classList.toggle('hidden', !on);
       $('tx-body-hint') && $('tx-body-hint').remove();
       if (diarized) {
         document.querySelectorAll('#transcript-turns .turn-text').forEach(el => {
@@ -4115,6 +4267,7 @@
       }
     }
     $('edit-btn').addEventListener('click', () => setEditing(!state.editing));
+    $('edit-done-floating').addEventListener('click', () => setEditing(false));
 
     // ---- Search within transcript ----
     let searchHits = [], searchIdx = -1;
@@ -4128,7 +4281,7 @@
     }
     function runSearch(q) {
       clearSearchHighlights();
-      if (!q || q.length < 2) { $('tx-search-count').textContent = ''; return; }
+      if (!q || q.length < 2) { $('tx-search-count').textContent = ''; $('tx-search-nav').classList.add('hidden'); return; }
       const root = $('tx-body-root');
       if (!root) return;
       const rx = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
@@ -4154,22 +4307,33 @@
         frag.appendChild(document.createTextNode(node.nodeValue.slice(last)));
         node.parentNode.replaceChild(frag, node);
       });
-      $('tx-search-count').textContent = searchHits.length
-        ? `${searchHits.length} match${searchHits.length === 1 ? '' : 'es'}` : 'No matches';
-      if (searchHits.length) { searchIdx = 0; focusHit(); }
+      const n = searchHits.length;
+      $('tx-search-count').textContent = n
+        ? `${searchIdx + 1} / ${n}` : 'No matches';
+      // Show prev/next arrows only when there's more than one match to cycle
+      $('tx-search-nav').classList.toggle('hidden', n < 2);
+      if (n) { searchIdx = 0; focusHit(); }
     }
     function focusHit() {
       searchHits.forEach((h, i) => h.classList.toggle('current', i === searchIdx));
       if (searchHits[searchIdx]) searchHits[searchIdx].scrollIntoView({ block: 'center', behavior: 'smooth' });
+      // Keep the "n / total" counter in sync as we move through matches
+      if (searchHits.length) $('tx-search-count').textContent = `${searchIdx + 1} / ${searchHits.length}`;
+    }
+    function stepSearch(dir) {
+      if (!searchHits.length) return;
+      searchIdx = (searchIdx + dir + searchHits.length) % searchHits.length;
+      focusHit();
     }
     $('tx-search').addEventListener('input', (e) => runSearch(e.target.value.trim()));
     $('tx-search').addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && searchHits.length) {
         e.preventDefault();
-        searchIdx = (searchIdx + (e.shiftKey ? -1 : 1) + searchHits.length) % searchHits.length;
-        focusHit();
+        stepSearch(e.shiftKey ? -1 : 1);
       }
     });
+    $('tx-search-prev').addEventListener('click', () => stepSearch(-1));
+    $('tx-search-next').addEventListener('click', () => stepSearch(1));
 
     // ============================================================================
     // Path picker wiring
