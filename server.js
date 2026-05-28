@@ -324,7 +324,7 @@ async function processAssemblyJob(job) {
   // Step 1: upload the file to AssemblyAI's storage
   job.stage = 'uploading';
   job.message = 'Uploading to AssemblyAI';
-  job.progress = 5;
+  job.progress = 0.05;
 
   const fileStream = fs.createReadStream(job.inputPath);
   const uploadRes = await fetch('https://api.assemblyai.com/v2/upload', {
@@ -346,7 +346,7 @@ async function processAssemblyJob(job) {
   // Step 2: submit the transcript request with diarization on
   job.stage = 'submitting';
   job.message = 'Starting transcription';
-  job.progress = 15;
+  job.progress = 0.15;
 
   const submitBody = {
     audio_url: upload_url,
@@ -392,7 +392,7 @@ async function processAssemblyJob(job) {
   // Step 3: poll for completion. AssemblyAI's polling cadence rec: 3-5 seconds.
   job.stage = 'transcribing';
   job.message = 'Transcribing — this can take a few minutes';
-  job.progress = 25;
+  job.progress = 0.25;
 
   const startTime = Date.now();
   const MAX_WAIT_MS = 30 * 60 * 1000; // 30 minutes ceiling
@@ -427,16 +427,25 @@ async function processAssemblyJob(job) {
       job.status = 'done';
       job.stage = 'done';
       job.message = 'Done';
-      job.progress = 100;
+      job.progress = 1;
       cleanupJob(job);
       return;
     }
     if (pollData.status === 'error') {
       throw new Error(pollData.error || 'AssemblyAI returned an error.');
     }
-    // queued, processing -> ease progress upward but cap before "done"
+    // queued, processing -> ease progress upward but cap before "done".
+    // Estimate expected processing time from file size: compressed audio
+    // is typically ~16 KB/sec (~128 kbps), and AssemblyAI processes at
+    // roughly 10x realtime in batch. So expected_ms ≈ (size/16000) * 100.
+    // Minimum 15s, maximum 10min as guardrails.
     const elapsed = Date.now() - startTime;
-    job.progress = Math.min(90, 25 + Math.floor(elapsed / 1000)); // 1% per second up to 90%
+    const estimatedAudioSec = Math.max(10, job.fileSize / 16000);
+    const expectedMs = Math.min(600000, Math.max(15000, estimatedAudioSec * 100));
+    // Map elapsed into [0.25, 0.95] using the expected window — won't reach
+    // 100% from estimation alone; only the 'completed' branch above does.
+    const frac = Math.min(1, elapsed / expectedMs);
+    job.progress = Math.min(0.95, 0.25 + frac * 0.70);
   }
 }
 

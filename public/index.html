@@ -1010,8 +1010,21 @@
     .dot.error { background: var(--error); box-shadow: 0 0 8px var(--error); }
     @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.85); } }
 
-    .progress-bar { height: 2px; background: var(--border); position: relative; border-radius: 1px; }
-    .progress-fill { position: absolute; inset: 0; right: auto; background: var(--cta); transition: width 0.3s; width: 0%; border-radius: 1px; }
+    .progress-bar { height: 6px; background: var(--border); position: relative; border-radius: 3px; overflow: hidden; margin-top: 0.85rem; }
+    .progress-fill { position: absolute; inset: 0; right: auto; background: linear-gradient(90deg, var(--cta), #4dafee); transition: width 0.4s ease-out; width: 0%; border-radius: 3px; overflow: hidden; }
+    .progress-fill::after {
+      content: '';
+      position: absolute; inset: 0;
+      background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.25) 50%, transparent 100%);
+      animation: progShimmer 1.6s ease-in-out infinite;
+    }
+    @keyframes progShimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(100%); }
+    }
+    .progress-meta { display: flex; justify-content: space-between; align-items: baseline; margin-top: 0.5rem; font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); letter-spacing: 0.05em; }
+    .progress-meta-pct { color: var(--cta); font-weight: 600; font-variant-numeric: tabular-nums; }
+    .progress-meta-eta { font-variant-numeric: tabular-nums; }
 
     .status-note { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--fg-muted); margin-top: 0.5rem; }
     .error-msg { font-family: var(--font-mono); font-size: 12px; color: var(--error); margin-top: 0.75rem; line-height: 1.5; word-break: break-word; }
@@ -1734,6 +1747,10 @@
           <div id="progress-wrap" class="progress-bar hidden">
             <div id="progress-fill" class="progress-fill"></div>
           </div>
+          <div id="progress-meta" class="progress-meta hidden">
+            <span id="progress-pct" class="progress-meta-pct">0%</span>
+            <span id="progress-eta" class="progress-meta-eta"></span>
+          </div>
           <div id="status-note" class="status-note hidden"></div>
           <div id="error-msg" class="error-msg hidden"></div>
         </div>
@@ -2056,6 +2073,10 @@
       timerHandle = setInterval(() => {
         state.elapsed = (Date.now() - elapsedStart) / 1000;
         $('status-elapsed').textContent = fmtTime(state.elapsed);
+        // ETA depends on elapsed time, so re-render the status block so the
+        // "~ N seconds remaining" updates continuously between server polls
+        // (which happen every ~2s). Render is cheap when nothing else changed.
+        if (['uploading','server-stage'].includes(state.stage)) render();
       }, 250);
     }
     function stopTimer() { if (timerHandle) clearInterval(timerHandle); timerHandle = null; }
@@ -2268,10 +2289,40 @@
 
         const showBar = ['uploading','server-stage'].includes(state.stage);
         $('progress-wrap').classList.toggle('hidden', !showBar);
+        $('progress-meta').classList.toggle('hidden', !showBar);
+
+        // Unified progress: upload occupies 0-15% of the bar, server-side
+        // processing occupies 15-100%. This way the bar fills continuously
+        // instead of resetting when the upload completes.
+        // Normalize serverProgress: most paths set it as 0-1 fraction; if a
+        // stale 0-100 value sneaks in (older server), divide.
+        let sp = state.serverProgress;
+        if (sp > 1) sp = sp / 100;
         let pct = 0;
-        if (state.stage === 'uploading') pct = state.uploadProgress * 100;
-        else if (state.stage === 'server-stage') pct = state.serverProgress * 100;
+        if (state.stage === 'uploading') pct = state.uploadProgress * 15;
+        else if (state.stage === 'server-stage') pct = 15 + sp * 85;
+        pct = Math.max(0, Math.min(100, pct));
         $('progress-fill').style.width = pct + '%';
+        $('progress-pct').textContent = Math.round(pct) + '%';
+
+        // ETA: extrapolate total time from current progress, subtract
+        // elapsed. Only show when progress is meaningful (>5%) and the
+        // estimate is in a sane range (5s..15min) — avoids misleading
+        // numbers at the start when the curve is steep.
+        let etaText = '';
+        const pctFrac = pct / 100;
+        if (showBar && pctFrac > 0.05 && state.elapsed > 1) {
+          const totalEst = state.elapsed / pctFrac;
+          const remaining = totalEst - state.elapsed;
+          if (remaining > 5 && remaining < 900) {
+            etaText = '~ ' + (remaining < 90
+              ? Math.round(remaining) + 's remaining'
+              : Math.ceil(remaining / 60) + ' min remaining');
+          } else if (remaining >= 0 && remaining <= 5) {
+            etaText = 'finishing up…';
+          }
+        }
+        $('progress-eta').textContent = etaText;
 
         const showNote = state.chunkInfo.total > 1 && state.stage === 'server-stage';
         $('status-note').classList.toggle('hidden', !showNote);
