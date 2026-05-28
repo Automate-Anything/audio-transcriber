@@ -72,6 +72,7 @@
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
       min-height: 100vh;
+      overflow-x: hidden;
     }
     /* paper-grain overlay removed — keep background clean */
 
@@ -258,15 +259,14 @@
       padding: 0;
       align-items: center;
       border-radius: 6px;
-      transition: background 0.2s;
+      transition: background 0.2s, opacity 0.2s;
     }
     .topnav-hamburger:hover { background: rgba(75, 108, 140, 0.1); }
     @media (min-width: 1024px) { .topnav-hamburger { display: none; } }
-    .topnav-hamburger span { display: block; width: 20px; height: 2px; background: var(--aa-text); transition: transform 0.25s, opacity 0.25s, background 0.2s; }
-    .topnav.open .topnav-hamburger span { background: var(--aa-text-strong); }
-    .topnav.open .topnav-hamburger span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
-    .topnav.open .topnav-hamburger span:nth-child(2) { opacity: 0; }
-    .topnav.open .topnav-hamburger span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+    .topnav-hamburger span { display: block; width: 20px; height: 2px; background: var(--aa-text); border-radius: 1px; }
+    /* When the mobile menu is open, hide the hamburger entirely — the
+       only close affordance is the explicit X inside the menu. */
+    .topnav.open .topnav-hamburger { opacity: 0; pointer-events: none; }
 
     /* Mobile menu (full-screen slide-in) */
     .topnav-mobile {
@@ -417,17 +417,36 @@
       border: 1px solid var(--border);
       background: var(--bg-card);
       margin-bottom: 1rem;
-      gap: 1rem;
-      flex-wrap: wrap;
+      gap: 0.75rem;
       border-radius: 8px;
+      max-width: 100%;
     }
-    .server-badge .left { display: flex; align-items: center; gap: 0.6rem; min-width: 0; flex: 1; }
+    .server-badge .left { display: flex; align-items: center; gap: 0.6rem; min-width: 0; flex: 1 1 auto; }
+    .server-badge .text { min-width: 0; flex: 1; }
     .server-badge .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
     .server-badge.shared .dot { background: var(--fg-faint); }
     .server-badge.own    .dot { background: var(--success); box-shadow: 0 0 8px var(--success); }
-    .server-badge .label { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--fg); font-weight: 500; }
-    .server-badge .sub   { font-family: var(--font-mono); font-size: 10px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .server-badge .change-link { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--cta); cursor: pointer; background: none; border: none; padding: 0.25rem 0.5rem; text-decoration: underline; text-underline-offset: 3px; }
+    .server-badge .label {
+      font-family: var(--font-mono); font-size: 11px;
+      text-transform: uppercase; letter-spacing: 0.15em;
+      color: var(--fg); font-weight: 500;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .server-badge .sub {
+      font-family: var(--font-mono); font-size: 10px;
+      color: var(--fg-muted);
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+      margin-top: 2px;
+    }
+    .server-badge .change-link {
+      font-family: var(--font-mono); font-size: 10px;
+      text-transform: uppercase; letter-spacing: 0.2em;
+      color: var(--cta); cursor: pointer;
+      background: none; border: none;
+      padding: 0.25rem 0.5rem;
+      text-decoration: underline; text-underline-offset: 3px;
+      flex-shrink: 0;
+    }
     .server-badge .change-link:hover { color: var(--accent); }
 
     /* API key panel */
@@ -859,10 +878,10 @@
       <div id="server-badge" class="server-badge shared">
         <div class="left">
           <span class="dot"></span>
-          <span>
-            <span class="label" id="server-label">Using shared free server</span>
-            <span class="sub" id="server-sub">good for small files · slow for files over 100 MB</span>
-          </span>
+          <div class="text">
+            <div class="label" id="server-label">Using shared free server</div>
+            <div class="sub" id="server-sub">good for small files · slow for files over 100 MB</div>
+          </div>
         </div>
         <button id="server-change-btn" class="change-link" type="button">Change</button>
       </div>
