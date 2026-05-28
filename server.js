@@ -526,6 +526,9 @@ app.post('/api/post-process', postProcessLimiter, express.json({ limit: '4mb' })
   const transcript = (req.body.transcript || '').toString().trim();
   const tasks = Array.isArray(req.body.tasks) ? req.body.tasks : [];
   const targetLanguage = (req.body.targetLanguage || '').toString().trim().slice(0, 40);
+  // Model choice — allowlisted so we only pass valid identifiers to OpenAI.
+  const ALLOWED_MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1'];
+  const model = ALLOWED_MODELS.includes(req.body.model) ? req.body.model : 'gpt-4o-mini';
   if (!transcript) return res.status(400).json({ error: 'No transcript provided.' });
   if (!tasks.length) return res.status(400).json({ error: 'No tasks requested.' });
 
@@ -565,7 +568,7 @@ app.post('/api/post-process', postProcessLimiter, express.json({ limit: '4mb' })
         fields.map(f => '- ' + f).join('\n') +
         `\n\nReturn only valid JSON. Transcript:\n"""\n${text}\n"""`;
       const completion = await client.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model,
         messages: [{ role: 'system', content: sys }, { role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
         max_tokens: 2000,
@@ -581,7 +584,7 @@ app.post('/api/post-process', postProcessLimiter, express.json({ limit: '4mb' })
     if (tasks.includes('translate')) {
       const lang = targetLanguage || 'English';
       const completion = await client.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model,
         messages: [
           { role: 'system', content: `You are a translator. Translate the user's transcript into ${lang}. Preserve speaker labels and line breaks. Output only the translation, no preamble.` },
           { role: 'user', content: text },

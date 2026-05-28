@@ -1220,6 +1220,8 @@
     }
     .edit-floating-text { font-family: var(--font-sans); font-size: 13px; color: var(--fg-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
     .edit-floating-done { border-radius: 999px; padding: 0.45rem 1.4rem; flex-shrink: 0; }
+    .edit-floating-discard { border-radius: 999px; padding: 0.45rem 1.1rem; flex-shrink: 0; }
+    .edit-floating-discard:hover:not(:disabled) { border-color: var(--error); color: var(--error); background: transparent; }
     @media (max-width: 480px) { .edit-floating-text { font-size: 12px; } }
     /* History */
     .history-section { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
@@ -1292,6 +1294,10 @@
       font-family: var(--font-sans); font-size: 13px; cursor: pointer;
     }
     .ai-translate-lang:disabled { opacity: 0.4; cursor: not-allowed; }
+    .ai-model-row { display: flex; align-items: center; flex-wrap: wrap; gap: 0.6rem; margin-top: 0.9rem; }
+    .ai-model-label { font-family: var(--font-sans); font-size: 13px; font-weight: 600; color: var(--fg-soft); }
+    .ai-model-desc { font-family: var(--font-sans); font-size: 12.5px; color: var(--fg-muted); flex: 1 1 100%; }
+    @media (min-width: 560px) { .ai-model-desc { flex: 0 1 auto; } }
     .ai-results { margin-top: 1rem; display: flex; flex-direction: column; gap: 1rem; }
     .ai-results-status {
       padding: 0.85rem 1rem; border-radius: 8px;
@@ -2046,6 +2052,15 @@
               <option value="Italian">Italian</option>
             </select>
           </div>
+          <div class="ai-model-row">
+            <span class="ai-model-label">AI model</span>
+            <select id="opt-model" class="ai-translate-lang" aria-label="AI model">
+              <option value="gpt-4o-mini">GPT-4o mini — fast &amp; economical</option>
+              <option value="gpt-4o">GPT-4o — sharper &amp; more detailed</option>
+              <option value="gpt-4.1">GPT-4.1 — most thorough</option>
+            </select>
+            <span id="ai-model-desc" class="ai-model-desc"></span>
+          </div>
         </div>
 
         <!-- Path picker -->
@@ -2193,7 +2208,8 @@
 
   <!-- Floating save bar while editing the transcript (always visible) -->
   <div id="edit-floating-bar" class="edit-floating-bar hidden">
-    <span class="edit-floating-text">Editing — tap Done to save your changes</span>
+    <span class="edit-floating-text">Editing transcript</span>
+    <button id="edit-discard-floating" class="btn edit-floating-discard" type="button">Discard</button>
     <button id="edit-done-floating" class="btn primary edit-floating-done" type="button">Done</button>
   </div>
 
@@ -2397,6 +2413,7 @@
     const KEYTERMS_STORAGE = 'keyterms';
     const HISTORY_STORAGE = 'transcript_history';
     const THEME_STORAGE = 'theme';
+    const MODEL_STORAGE = 'ai_model';
     const ACTIVE_JOB_STORAGE = 'active_job';
     const HISTORY_MAX = 10;
     const SERVER_URL_STORAGE = 'custom_server_url';
@@ -2960,10 +2977,11 @@
         if (state.showConfidence && Array.isArray(u.words) && u.words.length) {
           for (let wi = 0; wi < u.words.length; wi++) {
             const w = u.words[wi];
-            // 0.4 threshold: AssemblyAI scores many perfectly-correct words
-            // in the 0.5-0.8 range, so a higher cutoff produces lots of false
-            // flags. Only genuinely uncertain words tend to fall below 0.4.
-            if (w.confidence != null && w.confidence < 0.4) {
+            // 0.3 threshold: word-confidence reflects the model's acoustic
+            // certainty, not whether a word is correct, so it over-flags
+            // clearly-correct words at higher cutoffs. Keep it low so only
+            // genuinely garbled words get flagged.
+            if (w.confidence != null && w.confidence < 0.3) {
               const span = document.createElement('span');
               span.className = 'lc-word';
               span.textContent = w.text;
@@ -3212,6 +3230,20 @@
       $('opt-translate-lang').disabled = !e.target.checked;
     });
 
+    // Model selector: friendly descriptions + persistence
+    const MODEL_DESCRIPTIONS = {
+      'gpt-4o-mini': 'Quick and inexpensive — fine for most notes and summaries.',
+      'gpt-4o': 'More nuanced and accurate. Costs a bit more per run.',
+      'gpt-4.1': 'Deepest analysis with a large memory for long meetings. Highest cost.',
+    };
+    function updateModelDesc() {
+      $('ai-model-desc').textContent = MODEL_DESCRIPTIONS[$('opt-model').value] || '';
+    }
+    $('opt-model').addEventListener('change', () => {
+      updateModelDesc();
+      try { localStorage.setItem(MODEL_STORAGE, $('opt-model').value); } catch {}
+    });
+
     // Drives the animated progress bar toward `target`% over an estimated
     // duration. We can't get real progress from a single OpenAI call, so we
     // ease toward 90% over the estimate, then jump to 100% on completion.
@@ -3280,6 +3312,7 @@
             transcript,
             tasks,
             targetLanguage: $('opt-translate-lang').value,
+            model: $('opt-model').value,
           }),
         });
         const data = await resp.json();
@@ -4264,22 +4297,25 @@
     });
 
     // ---- In-place editing ----
-    function setEditing(on) {
+    function setEditing(on, save) {
       state.editing = on;
       const diarized = Array.isArray(state.utterances) && state.utterances.length > 0;
       $('edit-btn').textContent = on ? 'Done' : 'Edit';
       $('edit-btn').classList.toggle('active', on);
       $('edit-floating-bar').classList.toggle('hidden', !on);
       $('tx-body-hint') && $('tx-body-hint').remove();
-      if (diarized) {
-        document.querySelectorAll('#transcript-turns .turn-text').forEach(el => {
-          el.contentEditable = on ? 'true' : 'false';
-        });
-      } else {
-        $('transcript-text').contentEditable = on ? 'true' : 'false';
+      if (on) {
+        // Enter edit mode
+        if (diarized) {
+          document.querySelectorAll('#transcript-turns .turn-text').forEach(el => el.contentEditable = 'true');
+        } else {
+          $('transcript-text').contentEditable = 'true';
+        }
+        return;
       }
-      if (!on) {
-        // Persist edits back into state so copy/export use the edited text
+      // Exiting edit mode
+      if (save) {
+        // Persist DOM edits back into state so copy/export use them
         if (diarized) {
           const turnEls = document.querySelectorAll('#transcript-turns .turn');
           turnEls.forEach((el, i) => {
@@ -4290,10 +4326,17 @@
         } else {
           state.transcript = $('transcript-text').innerText.trim();
         }
+        // Turn off editability on the existing nodes
+        if (diarized) document.querySelectorAll('#transcript-turns .turn-text').forEach(el => el.contentEditable = 'false');
+        else $('transcript-text').contentEditable = 'false';
+      } else {
+        // Discard: re-render from the untouched state to throw away DOM edits
+        render();
       }
     }
-    $('edit-btn').addEventListener('click', () => setEditing(!state.editing));
-    $('edit-done-floating').addEventListener('click', () => setEditing(false));
+    $('edit-btn').addEventListener('click', () => setEditing(!state.editing, true));
+    $('edit-done-floating').addEventListener('click', () => setEditing(false, true));
+    $('edit-discard-floating').addEventListener('click', () => setEditing(false, false));
 
     // ---- Search within transcript ----
     let searchHits = [], searchIdx = -1;
@@ -4342,7 +4385,17 @@
     }
     function focusHit() {
       searchHits.forEach((h, i) => h.classList.toggle('current', i === searchIdx));
-      if (searchHits[searchIdx]) searchHits[searchIdx].scrollIntoView({ block: 'center', behavior: 'smooth' });
+      const el = searchHits[searchIdx];
+      if (el) {
+        // Scroll WITHIN the transcript body (which has its own overflow), not
+        // the whole page — otherwise stepping through matches scrolls the
+        // page down so far the search bar disappears.
+        const container = $('tx-body-root');
+        const cRect = container.getBoundingClientRect();
+        const eRect = el.getBoundingClientRect();
+        const delta = (eRect.top - cRect.top) - (container.clientHeight / 2) + (eRect.height / 2);
+        container.scrollTop += delta;
+      }
       // Keep the "n / total" counter in sync as we move through matches
       if (searchHits.length) $('tx-search-count').textContent = `${searchIdx + 1} / ${searchHits.length}`;
     }
@@ -4511,6 +4564,14 @@
         state.pairing.code = pendingPair;
       }
     } catch {}
+
+    try {
+      const savedModel = localStorage.getItem(MODEL_STORAGE);
+      if (savedModel && [...$('opt-model').options].some(o => o.value === savedModel)) {
+        $('opt-model').value = savedModel;
+      }
+    } catch {}
+    updateModelDesc();
 
     renderServerBadge();
     renderHistory();
