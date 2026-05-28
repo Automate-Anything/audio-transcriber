@@ -14,16 +14,35 @@
       --font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
       --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
 
-      --cream: #F5F1EA;
-      --paper: #EFEAE0;
-      --ink: #0F0E0D;
-      --rust: #C04A2B;
-      --smoke: #8A8378;
-      --ok: #2D6A4F;
-      --gold: #B8902E;
-      --ink-dim: rgba(15, 14, 13, 0.3);
-      --ink-faint: rgba(15, 14, 13, 0.1);
-      --ink-fainter: rgba(15, 14, 13, 0.04);
+      /* AutomateAnything dark theme — pulled from the marketing-site repo */
+      --bg:           #121b2c;
+      --bg-alt:       #0a1322;
+      --bg-card:      #1a2438;
+      --bg-input:     #0a1322;
+      --fg:           #ffffff;
+      --fg-muted:     #94a3b8;
+      --fg-faint:     rgba(148, 163, 184, 0.65);
+      --accent:       #4b6c8c;
+      --cta:          #006cbe;
+      --cta-hover:    #4b6c8c;
+      --border:       rgba(75, 108, 140, 0.2);
+      --border-strong:rgba(75, 108, 140, 0.4);
+      --border-faint: rgba(75, 108, 140, 0.1);
+      --success:      #10b981;
+      --warning:      #f59e0b;
+      --error:        #ef4444;
+
+      /* Legacy aliases — keep existing rules working under the new palette */
+      --cream:        var(--bg);
+      --paper:        var(--bg-card);
+      --ink:          var(--fg);
+      --rust:         var(--cta);
+      --smoke:        var(--fg-muted);
+      --ok:           var(--success);
+      --gold:         var(--warning);
+      --ink-dim:      var(--border-strong);
+      --ink-faint:    var(--border);
+      --ink-fainter:  var(--border-faint);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -338,132 +357,148 @@
     .hero p { font-family: var(--font-sans); color: var(--smoke); font-size: 0.95rem; line-height: 1.45; margin-top: 0.6rem; max-width: 36rem; }
     @media (min-width: 768px) { .hero p { font-size: 1.05rem; margin-top: 0.75rem; } }
 
-    .panel { border: 1px solid var(--ink); }
+    .panel { border: 1px solid var(--border); background: var(--bg-card); border-radius: 8px; }
 
     /* ===== Server badge ===== */
     .server-badge {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 0.6rem 1rem;
-      border: 1px solid var(--ink-dim);
+      padding: 0.7rem 1rem;
+      border: 1px solid var(--border);
+      background: var(--bg-card);
       margin-bottom: 1rem;
       gap: 1rem;
       flex-wrap: wrap;
+      border-radius: 8px;
     }
     .server-badge .left { display: flex; align-items: center; gap: 0.6rem; min-width: 0; flex: 1; }
-    .server-badge .dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-    .server-badge.shared .dot { background: var(--smoke); }
-    .server-badge.own    .dot { background: var(--ok); }
-    .server-badge .label { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--ink); }
-    .server-badge .sub   { font-family: var(--font-mono); font-size: 10px; color: var(--smoke); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .server-badge .change-link { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--ink); cursor: pointer; background: none; border: none; padding: 0.25rem 0.5rem; text-decoration: underline; text-underline-offset: 3px; }
-    .server-badge .change-link:hover { color: var(--rust); }
+    .server-badge .dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+    .server-badge.shared .dot { background: var(--fg-faint); }
+    .server-badge.own    .dot { background: var(--success); box-shadow: 0 0 8px var(--success); }
+    .server-badge .label { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--fg); font-weight: 500; }
+    .server-badge .sub   { font-family: var(--font-mono); font-size: 10px; color: var(--fg-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .server-badge .change-link { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--cta); cursor: pointer; background: none; border: none; padding: 0.25rem 0.5rem; text-decoration: underline; text-underline-offset: 3px; }
+    .server-badge .change-link:hover { color: var(--accent); }
 
     /* API key panel */
     .key-panel { padding: 1rem 1.25rem; }
     .key-label { display: block; margin-bottom: 0.6rem; }
-    .key-input-wrap { display: flex; align-items: stretch; border: 1px solid var(--ink); width: 100%; }
-    .key-input { flex: 1; min-width: 0; padding: 0.7rem 0.9rem; border: none; background: transparent; font-family: var(--font-mono); font-size: 13px; color: var(--ink); outline: none; }
-    .key-input::placeholder { color: var(--smoke); }
-    .reveal-btn { padding: 0.7rem 0.9rem; background: transparent; border: none; border-left: 1px solid var(--ink); font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--ink); cursor: pointer; white-space: nowrap; }
-    .reveal-btn:hover { background: var(--ink); color: var(--cream); }
+    .key-input-wrap { display: flex; align-items: stretch; border: 1px solid var(--border-strong); width: 100%; background: var(--bg-input); }
+    .key-input { flex: 1; min-width: 0; padding: 0.7rem 0.9rem; border: none; background: transparent; font-family: var(--font-mono); font-size: 13px; color: var(--fg); outline: none; }
+    .key-input::placeholder { color: var(--fg-faint); }
+    .reveal-btn { padding: 0.7rem 0.9rem; background: transparent; border: none; border-left: 1px solid var(--border-strong); font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--fg-muted); cursor: pointer; white-space: nowrap; transition: background 0.15s, color 0.15s; }
+    .reveal-btn:hover { background: var(--accent); color: var(--fg); }
     .key-actions { display: flex; gap: 0.6rem; margin-top: 0.75rem; align-items: center; flex-wrap: wrap; }
-    .key-saved-line { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 0.9rem; border: 1px solid var(--ink); width: 100%; }
-    .check { color: var(--ok); font-weight: 600; }
-    .key-preview { flex: 1; font-family: var(--font-mono); font-size: 13px; color: var(--ink); }
-    .key-help { font-family: var(--font-mono); font-size: 12px; line-height: 1.5; color: var(--smoke); margin-top: 0.75rem; text-transform: none; letter-spacing: 0; }
-    .err-inline { color: var(--rust); font-family: var(--font-mono); font-size: 12px; text-transform: none; letter-spacing: 0; }
+    .key-saved-line { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 0.9rem; border: 1px solid var(--border-strong); width: 100%; background: var(--bg-input); }
+    .check { color: var(--success); font-weight: 600; }
+    .key-preview { flex: 1; font-family: var(--font-mono); font-size: 13px; color: var(--fg); }
+    .key-help { font-family: var(--font-sans); font-size: 12.5px; line-height: 1.55; color: var(--fg-muted); margin-top: 0.75rem; text-transform: none; letter-spacing: 0; }
+    .key-help a { color: var(--cta); text-decoration: underline; text-underline-offset: 2px; }
+    .key-help a:hover { color: var(--accent); }
+    .key-help strong { color: var(--fg); }
+    .err-inline { color: var(--error); font-family: var(--font-mono); font-size: 12px; text-transform: none; letter-spacing: 0; }
 
     /* Dropzone */
-    .dropzone { position: relative; display: block; border: 1px solid var(--ink); cursor: pointer; transition: background 0.2s, color 0.2s; -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
-    .dropzone.drag-over { background: var(--ink); color: var(--cream); }
-    .dropzone.drag-over .mono-sm { color: var(--cream); }
+    .dropzone { position: relative; display: block; border: 1px dashed var(--border-strong); cursor: pointer; transition: background 0.2s, border-color 0.2s; -webkit-tap-highlight-color: transparent; touch-action: manipulation; background: var(--bg-card); border-radius: 8px; }
+    .dropzone:hover { border-color: var(--accent); background: rgba(75, 108, 140, 0.08); }
+    .dropzone.drag-over { background: var(--accent); color: var(--fg); border-color: var(--accent); border-style: solid; }
+    .dropzone.drag-over .mono-sm { color: var(--fg); }
     .dz-input { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; z-index: 2; font-size: 16px; pointer-events: auto; }
     .dz-visual { padding: 2.5rem 1.25rem; text-align: center; pointer-events: none; position: relative; z-index: 1; }
-    .dz-visual h2 { font-family: var(--font-serif); font-weight: 400; font-size: 1.5rem; }
+    .dz-visual h2 { font-family: var(--font-serif); font-weight: 400; font-size: 1.5rem; color: var(--fg); }
     @media (min-width: 768px) { .dz-visual { padding: 3.5rem 2rem; } .dz-visual h2 { font-size: 2.25rem; } }
 
-    .file-row { display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--ink-dim); }
+    .file-row { display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); }
     @media (min-width: 768px) { .file-row { flex-direction: row; align-items: center; justify-content: space-between; } }
-    .file-name { font-family: var(--font-serif); font-size: 1.25rem; font-weight: 400; }
+    .file-name { font-family: var(--font-serif); font-size: 1.25rem; font-weight: 400; color: var(--fg); }
     @media (min-width: 768px) { .file-name { font-size: 1.5rem; } }
-    .file-meta { font-family: var(--font-mono); font-size: 12px; color: var(--smoke); margin-top: 0.25rem; }
+    .file-meta { font-family: var(--font-mono); font-size: 12px; color: var(--fg-muted); margin-top: 0.25rem; }
 
-    .btn { font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em; padding: 0.6rem 1rem; cursor: pointer; transition: background 0.15s, color 0.15s, opacity 0.15s; border: 1px solid var(--ink); background: transparent; color: var(--ink); }
-    .btn:hover:not(:disabled) { background: var(--ink); color: var(--cream); }
-    .btn.primary { background: var(--ink); color: var(--cream); }
-    .btn.primary:hover:not(:disabled) { background: var(--rust); border-color: var(--rust); }
+    .btn {
+      font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.2em;
+      padding: 0.6rem 1rem; cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s, opacity 0.15s;
+      border: 1px solid var(--accent); background: transparent; color: var(--fg-muted);
+    }
+    .btn:hover:not(:disabled) { background: var(--accent); color: var(--fg); border-color: var(--accent); }
+    .btn.primary { background: var(--cta); color: var(--fg); border-color: var(--cta); }
+    .btn.primary:hover:not(:disabled) { background: var(--cta-hover); border-color: var(--cta-hover); }
     .btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .btn-row { display: flex; gap: 0.75rem; flex-shrink: 0; }
 
     /* ===== Path picker ===== */
     .path-picker {
       padding: 1.5rem;
-      border-bottom: 1px solid var(--ink-dim);
-      background: var(--ink-fainter);
+      border-bottom: 1px solid var(--border);
+      background: rgba(0,0,0,0.2);
     }
     .path-picker-head {
       font-family: var(--font-serif);
       font-size: 1.15rem;
       font-weight: 400;
       margin-bottom: 1.25rem;
+      color: var(--fg);
     }
     .path-grid { display: grid; gap: 1rem; }
     @media (min-width: 600px) { .path-grid { grid-template-columns: 1fr 1fr; } }
     .path-card {
-      border: 1px solid var(--ink-dim);
+      border: 1px solid var(--border);
       padding: 1.25rem;
-      background: var(--cream);
+      background: var(--bg-card);
       cursor: pointer;
       transition: border-color 0.15s, background 0.15s;
       position: relative;
       display: flex; flex-direction: column;
+      border-radius: 8px;
     }
-    .path-card:hover { border-color: var(--ink); }
-    .path-card.recommended { border-color: var(--ink); }
+    .path-card:hover { border-color: var(--accent); }
+    .path-card.recommended { border-color: var(--cta); box-shadow: 0 0 0 1px rgba(0, 108, 190, 0.3); }
     .path-card.recommended::after {
       content: 'Recommended';
       position: absolute;
       top: -0.55rem; right: 1rem;
-      background: var(--ink); color: var(--cream);
+      background: var(--cta); color: var(--fg);
       font-family: var(--font-mono);
       font-size: 9px; text-transform: uppercase; letter-spacing: 0.2em;
       padding: 0.2rem 0.5rem;
+      border-radius: 3px;
     }
     .path-card.dimmed { opacity: 0.55; }
     .path-icon { font-size: 1.4rem; margin-bottom: 0.5rem; }
-    .path-title { font-family: var(--font-serif); font-size: 1.4rem; font-weight: 400; line-height: 1.1; margin-bottom: 0.35rem; }
-    .path-subtitle { font-family: var(--font-mono); font-size: 10px; color: var(--smoke); text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 0.75rem; }
-    .path-desc { font-family: var(--font-serif); font-size: 0.95rem; color: var(--ink); line-height: 1.45; flex: 1; margin-bottom: 1rem; font-style: italic; }
-    .path-eta { font-family: var(--font-mono); font-size: 11px; color: var(--smoke); margin-bottom: 1rem; text-transform: none; letter-spacing: 0; }
-    .path-eta strong { color: var(--ink); font-weight: 500; }
+    .path-title { font-family: var(--font-serif); font-size: 1.4rem; font-weight: 400; line-height: 1.1; margin-bottom: 0.35rem; color: var(--fg); }
+    .path-subtitle { font-family: var(--font-mono); font-size: 10px; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 0.75rem; }
+    .path-desc { font-family: var(--font-sans); font-size: 0.95rem; color: var(--fg-muted); line-height: 1.45; flex: 1; margin-bottom: 1rem; }
+    .path-eta { font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); margin-bottom: 1rem; text-transform: none; letter-spacing: 0; }
+    .path-eta strong { color: var(--fg); font-weight: 500; }
     .path-btn-row { margin-top: auto; }
 
-    .status-row { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--ink-dim); }
+    .status-row { padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); }
     .status-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.75rem; }
     .status-head-l { display: flex; align-items: center; gap: 0.75rem; }
     .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; }
-    .dot.active { background: var(--rust); animation: pulse 1.2s ease-in-out infinite; }
-    .dot.done { background: var(--ink); }
-    .dot.error { background: var(--rust); }
+    .dot.active { background: var(--cta); box-shadow: 0 0 8px var(--cta); animation: pulse 1.2s ease-in-out infinite; }
+    .dot.done { background: var(--success); box-shadow: 0 0 8px var(--success); }
+    .dot.error { background: var(--error); box-shadow: 0 0 8px var(--error); }
     @keyframes pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.85); } }
 
-    .progress-bar { height: 1px; background: var(--ink-faint); position: relative; }
-    .progress-fill { position: absolute; inset: 0; right: auto; background: var(--ink); transition: width 0.3s; width: 0%; }
+    .progress-bar { height: 2px; background: var(--border); position: relative; border-radius: 1px; }
+    .progress-fill { position: absolute; inset: 0; right: auto; background: var(--cta); transition: width 0.3s; width: 0%; border-radius: 1px; }
 
-    .status-note { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--smoke); margin-top: 0.5rem; }
-    .error-msg { font-family: var(--font-mono); font-size: 12px; color: var(--rust); margin-top: 0.75rem; line-height: 1.5; word-break: break-word; }
+    .status-note { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--fg-muted); margin-top: 0.5rem; }
+    .error-msg { font-family: var(--font-mono); font-size: 12px; color: var(--error); margin-top: 0.75rem; line-height: 1.5; word-break: break-word; }
 
-    .tx-head { display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 1.5rem; border-bottom: 1px solid var(--ink-dim); gap: 0.5rem; }
+    .tx-head { display: flex; align-items: center; justify-content: space-between; padding: 0.9rem 1.5rem; border-bottom: 1px solid var(--border); gap: 0.5rem; }
     .tx-actions { display: flex; gap: 0.5rem; }
-    .tx-body { padding: 2rem 1.5rem; max-height: 60vh; overflow-y: auto; }
+    .tx-body { padding: 2rem 1.5rem; max-height: 60vh; overflow-y: auto; background: var(--bg-alt); }
     @media (min-width: 768px) { .tx-body { padding: 3rem 2.5rem; } }
-    .tx-body p { font-family: var(--font-serif); font-weight: 300; font-size: 1.125rem; line-height: 1.7; white-space: pre-wrap; }
-    @media (min-width: 768px) { .tx-body p { font-size: 1.25rem; } }
+    .tx-body p { font-family: var(--font-serif); font-weight: 400; font-size: 1.05rem; line-height: 1.7; white-space: pre-wrap; color: var(--fg); }
+    @media (min-width: 768px) { .tx-body p { font-size: 1.15rem; } }
 
     /* ===== Modal ===== */
     .modal-overlay {
       position: fixed; inset: 0;
-      background: rgba(15, 14, 13, 0.55);
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
       z-index: 100;
       display: flex; align-items: center; justify-content: center;
       padding: 1rem;
@@ -471,61 +506,68 @@
     }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     .modal {
-      background: var(--cream);
-      border: 1px solid var(--ink);
+      background: var(--bg-card);
+      border: 1px solid var(--border-strong);
       max-width: 38rem;
       width: 100%;
       max-height: 90vh;
       overflow-y: auto;
       animation: slideUp 0.25s ease-out;
+      border-radius: 10px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
     }
     @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
     .modal-header {
       display: flex; align-items: center; justify-content: space-between;
       padding: 1.25rem 1.75rem;
-      border-bottom: 1px solid var(--ink);
+      border-bottom: 1px solid var(--border);
     }
-    .modal-title { font-family: var(--font-serif); font-size: 1.5rem; font-weight: 400; }
-    .modal-close { background: none; border: none; cursor: pointer; font-family: var(--font-mono); font-size: 16px; color: var(--ink); padding: 0.25rem 0.5rem; }
-    .modal-close:hover { color: var(--rust); }
+    .modal-title { font-family: var(--font-serif); font-size: 1.5rem; font-weight: 400; color: var(--fg); }
+    .modal-close { background: none; border: none; cursor: pointer; font-family: var(--font-mono); font-size: 18px; color: var(--fg-muted); padding: 0.25rem 0.5rem; transition: color 0.15s; }
+    .modal-close:hover { color: var(--fg); }
     .modal-body { padding: 1.75rem; }
-    .modal-body h3 { font-family: var(--font-serif); font-weight: 400; font-size: 1.15rem; margin-bottom: 0.5rem; margin-top: 1.25rem; }
+    .modal-body h3 { font-family: var(--font-serif); font-weight: 400; font-size: 1.15rem; margin-bottom: 0.5rem; margin-top: 1.25rem; color: var(--fg); }
     .modal-body h3:first-child { margin-top: 0; }
-    .modal-body p { font-family: var(--font-serif); font-size: 1rem; line-height: 1.55; color: var(--ink); margin-bottom: 0.75rem; }
+    .modal-body p { font-family: var(--font-sans); font-size: 0.95rem; line-height: 1.55; color: var(--fg-muted); margin-bottom: 0.75rem; }
     .modal-body ol { padding-left: 1.5rem; margin: 0.5rem 0 1rem; }
-    .modal-body ol li { font-family: var(--font-serif); font-size: 1rem; line-height: 1.55; padding-left: 0.3rem; margin-bottom: 0.45rem; }
-    .modal-body strong { font-weight: 500; }
+    .modal-body ol li { font-family: var(--font-sans); font-size: 0.95rem; line-height: 1.55; padding-left: 0.3rem; margin-bottom: 0.45rem; color: var(--fg-muted); }
+    .modal-body strong { font-weight: 500; color: var(--fg); }
+    .modal-body a { color: var(--cta); text-decoration: underline; text-underline-offset: 2px; }
+    .modal-body a:hover { color: var(--accent); }
+    .modal-body code { font-family: var(--font-mono); background: var(--bg-input); padding: 0.1rem 0.35rem; border-radius: 3px; color: var(--fg); font-size: 0.9em; }
     .modal-footer {
       padding: 1.25rem 1.75rem;
-      border-top: 1px solid var(--ink-dim);
+      border-top: 1px solid var(--border);
       display: flex; gap: 0.75rem;
       justify-content: flex-end;
       flex-wrap: wrap;
     }
 
     .pairing-code-box {
-      border: 1px solid var(--ink);
-      background: var(--paper);
+      border: 1px solid var(--border-strong);
+      background: var(--bg-alt);
       padding: 1.5rem;
       text-align: center;
       margin: 1.25rem 0;
+      border-radius: 8px;
     }
     .pairing-code-label {
       font-family: var(--font-mono);
       font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.25em;
-      color: var(--smoke);
+      color: var(--fg-muted);
       margin-bottom: 0.5rem;
     }
     .pairing-code {
       font-family: var(--font-mono);
-      font-size: 2rem;
+      font-size: 1.75rem;
       font-weight: 500;
       letter-spacing: 0.05em;
-      color: var(--ink);
+      color: var(--fg);
       margin-bottom: 0.75rem;
       user-select: all;
+      word-break: break-all;
     }
     .pairing-copy {
       font-family: var(--font-mono);
@@ -533,36 +575,40 @@
       text-transform: uppercase;
       letter-spacing: 0.2em;
       background: transparent;
-      border: 1px solid var(--ink);
+      border: 1px solid var(--accent);
       padding: 0.4rem 0.8rem;
       cursor: pointer;
-      color: var(--ink);
+      color: var(--fg-muted);
+      border-radius: 4px;
+      transition: background 0.15s, color 0.15s;
     }
-    .pairing-copy:hover { background: var(--ink); color: var(--cream); }
+    .pairing-copy:hover { background: var(--accent); color: var(--fg); }
 
     .waiting-box {
-      border: 1px solid var(--ink-dim);
+      border: 1px solid var(--border);
       padding: 1.25rem;
       display: flex; align-items: center; gap: 0.75rem;
       margin-top: 1rem;
+      border-radius: 6px;
+      background: var(--bg-alt);
     }
-    .waiting-box.connected { border-color: var(--ok); background: rgba(45, 106, 79, 0.06); }
+    .waiting-box.connected { border-color: var(--success); background: rgba(16, 185, 129, 0.08); }
     .waiting-spinner {
       width: 14px; height: 14px;
-      border: 2px solid var(--ink-faint);
-      border-top-color: var(--rust);
+      border: 2px solid var(--border-strong);
+      border-top-color: var(--cta);
       border-radius: 50%;
       animation: spin 0.8s linear infinite;
       flex-shrink: 0;
     }
     @keyframes spin { to { transform: rotate(360deg); } }
-    .waiting-text { font-family: var(--font-mono); font-size: 12px; color: var(--ink); }
-    .waiting-text .sub { display: block; font-size: 10px; color: var(--smoke); margin-top: 0.25rem; text-transform: uppercase; letter-spacing: 0.15em; }
+    .waiting-text { font-family: var(--font-mono); font-size: 12px; color: var(--fg); }
+    .waiting-text .sub { display: block; font-size: 10px; color: var(--fg-muted); margin-top: 0.25rem; text-transform: uppercase; letter-spacing: 0.15em; }
 
     .manual-url-section {
       margin-top: 1.5rem;
       padding-top: 1.25rem;
-      border-top: 1px solid var(--ink-faint);
+      border-top: 1px solid var(--border);
     }
     .manual-url-section summary {
       cursor: pointer;
@@ -570,12 +616,13 @@
       font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.2em;
-      color: var(--smoke);
+      color: var(--fg-muted);
       padding: 0.25rem 0;
     }
-    .manual-url-section summary:hover { color: var(--ink); }
+    .manual-url-section summary:hover { color: var(--fg); }
     .manual-url-section .body { margin-top: 0.75rem; }
-    .manual-url-input { width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--ink); font-family: var(--font-mono); font-size: 12px; background: var(--cream); margin-bottom: 0.5rem; }
+    .manual-url-input { width: 100%; padding: 0.6rem 0.8rem; border: 1px solid var(--border-strong); font-family: var(--font-mono); font-size: 12px; background: var(--bg-input); color: var(--fg); margin-bottom: 0.5rem; border-radius: 4px; outline: none; }
+    .manual-url-input:focus { border-color: var(--cta); }
 
     footer { display: none; }
 
@@ -878,12 +925,12 @@
           </div>
         </div>
 
-        <div id="confirm-box" class="hidden" style="border: 1px solid var(--ok); background: rgba(45, 106, 79, 0.06); padding: 1.25rem; margin-top: 1rem;">
-          <div style="font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--ok); margin-bottom: 0.75rem;">✓ A server appeared with your code</div>
-          <div style="font-family: var(--font-serif); font-size: 1.05rem; margin-bottom: 0.4rem;">Confirm this is your server:</div>
-          <div style="font-family: var(--font-mono); font-size: 13px; word-break: break-all; padding: 0.6rem 0.8rem; background: var(--cream); border: 1px solid var(--ink-dim); margin-bottom: 0.5rem;" id="confirm-url-full"></div>
-          <div style="font-family: var(--font-mono); font-size: 10px; color: var(--smoke); text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 1rem;">Host: <span id="confirm-url-host"></span></div>
-          <div style="font-family: var(--font-serif); font-size: 0.9rem; color: var(--smoke); margin-bottom: 1rem; line-height: 1.4;"><strong style="color: var(--ink);">Only confirm if you just deployed this.</strong> If the URL looks unfamiliar, cancel and start over with a new code.</div>
+        <div id="confirm-box" class="hidden" style="border: 1px solid var(--success); background: rgba(16, 185, 129, 0.08); padding: 1.25rem; margin-top: 1rem; border-radius: 6px;">
+          <div style="font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--success); margin-bottom: 0.75rem;">✓ A server appeared with your code</div>
+          <div style="font-family: var(--font-serif); font-size: 1.05rem; margin-bottom: 0.4rem; color: var(--fg);">Confirm this is your server:</div>
+          <div style="font-family: var(--font-mono); font-size: 13px; word-break: break-all; padding: 0.6rem 0.8rem; background: var(--bg-input); border: 1px solid var(--border-strong); margin-bottom: 0.5rem; color: var(--fg); border-radius: 4px;" id="confirm-url-full"></div>
+          <div style="font-family: var(--font-mono); font-size: 10px; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.15em; margin-bottom: 1rem;">Host: <span id="confirm-url-host"></span></div>
+          <div style="font-family: var(--font-sans); font-size: 0.9rem; color: var(--fg-muted); margin-bottom: 1rem; line-height: 1.4;"><strong style="color: var(--fg);">Only confirm if you just deployed this.</strong> If the URL looks unfamiliar, cancel and start over with a new code.</div>
           <div style="display: flex; gap: 0.5rem;">
             <button id="confirm-server-btn" class="btn primary" style="flex: 1;">Yes, this is mine</button>
             <button id="confirm-cancel-btn" class="btn" style="flex: 1;">Cancel</button>
@@ -936,12 +983,12 @@
 
         <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1rem;">
           <button id="use-shared-btn" class="btn" style="width: 100%; padding: 1rem; text-align: left;">
-            <div style="font-family: var(--font-serif); font-size: 1.1rem; text-transform: none; letter-spacing: 0; font-weight: 400;">Shared free server</div>
-            <div style="font-family: var(--font-mono); font-size: 10px; color: var(--smoke); text-transform: uppercase; letter-spacing: 0.15em; margin-top: 0.25rem;">Default · slow for large files</div>
+            <div style="font-family: var(--font-serif); font-size: 1.1rem; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--fg);">Shared free server</div>
+            <div style="font-family: var(--font-mono); font-size: 10px; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.15em; margin-top: 0.25rem;">Default · slow for large files</div>
           </button>
           <button id="use-own-btn" class="btn" style="width: 100%; padding: 1rem; text-align: left;">
-            <div style="font-family: var(--font-serif); font-size: 1.1rem; text-transform: none; letter-spacing: 0; font-weight: 400;">My own server</div>
-            <div style="font-family: var(--font-mono); font-size: 10px; color: var(--smoke); text-transform: uppercase; letter-spacing: 0.15em; margin-top: 0.25rem;" id="own-server-sub">Set up takes ~5 min · faster after</div>
+            <div style="font-family: var(--font-serif); font-size: 1.1rem; text-transform: none; letter-spacing: 0; font-weight: 400; color: var(--fg);">My own server</div>
+            <div style="font-family: var(--font-mono); font-size: 10px; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.15em; margin-top: 0.25rem;" id="own-server-sub">Set up takes ~5 min · faster after</div>
           </button>
         </div>
       </div>
