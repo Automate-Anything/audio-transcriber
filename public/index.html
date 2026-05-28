@@ -1168,8 +1168,18 @@
     }
     .sync-scrub::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; background: var(--cta); border-radius: 50%; cursor: pointer; }
     .sync-scrub::-moz-range-thumb { width: 14px; height: 14px; background: var(--cta); border: none; border-radius: 50%; cursor: pointer; }
-    .sync-hint { color: var(--fg-faint); white-space: nowrap; }
-    @media (max-width: 640px) { .sync-hint { display: none; } }
+    .sync-hint {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      font-family: var(--font-sans); font-size: 12px;
+      color: var(--fg-soft); white-space: nowrap;
+    }
+    .sync-hint svg { color: var(--cta); flex-shrink: 0; }
+    @media (max-width: 560px) {
+      /* On narrow screens the bar is tight — drop the hint to its own line
+         so it stays readable instead of being clipped. */
+      .sync-player { flex-wrap: wrap; }
+      .sync-hint { width: 100%; justify-content: center; padding-top: 0.15rem; }
+    }
     .turn.sync-active, .seg-line.sync-active { background: rgba(0,108,190,0.1); border-radius: 6px; }
     .turn { cursor: default; transition: background 0.2s; }
     .turn.clickable, .seg-line.clickable { cursor: pointer; }
@@ -2041,7 +2051,10 @@
             <span id="sync-cur" class="sync-time">0:00</span>
             <input id="sync-scrub" class="sync-scrub" type="range" min="0" max="1000" value="0" aria-label="Seek">
             <span id="sync-dur" class="sync-time">0:00</span>
-            <span class="sync-hint mono-sm">tap a line to jump</span>
+            <span class="sync-hint">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 11.5V6a2 2 0 0 1 4 0v5"/><path d="M13 7a2 2 0 0 1 4 0v4"/><path d="M17 9a2 2 0 0 1 4 0v5a6 6 0 0 1-6 6h-2a6 6 0 0 1-5.5-3.6L5 13.5a1.5 1.5 0 0 1 2.6-1.5l1.4 2"/></svg>
+              Tap any line below to jump there
+            </span>
             <audio id="sync-audio" preload="metadata"></audio>
           </div>
           <div class="tx-body" id="tx-body-root">
