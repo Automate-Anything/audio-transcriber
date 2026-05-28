@@ -488,23 +488,24 @@
       font-size: 10px;
       text-transform: uppercase;
       letter-spacing: 0.2em;
-      color: var(--fg-muted);
-      margin-bottom: 0.5rem;
+      color: #cbd5e1;
+      margin-bottom: 0.6rem;
     }
     .key-steps ol {
-      margin: 0; padding-left: 1.25rem;
+      margin: 0; padding-left: 1.4rem;
       list-style-position: outside;
     }
     .key-steps li {
       font-family: var(--font-sans);
-      font-size: 13px;
-      line-height: 1.55;
-      color: var(--fg-muted);
-      padding-left: 0.2rem;
-      margin-bottom: 0.15rem;
+      font-size: 14px;
+      line-height: 1.6;
+      color: #cbd5e1;
+      padding-left: 0.25rem;
+      margin-bottom: 0.35rem;
     }
+    .key-steps li::marker { color: var(--fg-muted); font-variant-numeric: tabular-nums; }
     .key-steps li:last-child { margin-bottom: 0; }
-    .key-steps li strong { color: var(--fg); font-weight: 500; }
+    .key-steps li strong { color: var(--fg); font-weight: 600; }
 
     .key-input-wrap { display: flex; align-items: stretch; border: 1px solid var(--border-strong); width: 100%; background: var(--bg-input); }
     .key-input { flex: 1; min-width: 0; padding: 0.7rem 0.9rem; border: none; background: transparent; font-family: var(--font-mono); font-size: 13px; color: var(--fg); outline: none; }
@@ -515,10 +516,10 @@
     .key-saved-line { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 0.9rem; border: 1px solid var(--border-strong); width: 100%; background: var(--bg-input); }
     .check { color: var(--success); font-weight: 600; }
     .key-preview { flex: 1; font-family: var(--font-mono); font-size: 13px; color: var(--fg); }
-    .key-help { font-family: var(--font-sans); font-size: 12.5px; line-height: 1.55; color: var(--fg-muted); margin-top: 0.75rem; text-transform: none; letter-spacing: 0; }
+    .key-help { font-family: var(--font-sans); font-size: 13px; line-height: 1.55; color: #cbd5e1; margin-top: 0.75rem; text-transform: none; letter-spacing: 0; }
     .key-help a { color: var(--cta); text-decoration: underline; text-underline-offset: 2px; }
     .key-help a:hover { color: var(--accent); }
-    .key-help strong { color: var(--fg); }
+    .key-help strong { color: var(--fg); font-weight: 600; }
     .err-inline { color: var(--error); font-family: var(--font-mono); font-size: 12px; text-transform: none; letter-spacing: 0; }
 
     /* Dropzone */
