@@ -222,13 +222,19 @@ app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
   // Branch on provider. Default is OpenAI Whisper (single-speaker).
   const provider = (req.body.provider || 'openai').toLowerCase();
 
+  // Language code (ISO 639-1 like 'he', 'en', 'es', or empty for auto-detect).
+  // Validate shape so we don't pass arbitrary user input downstream. Max 5
+  // chars covers 2-letter codes plus optional region suffix (e.g. en_us).
+  const rawLang = (req.body.language || '').toString().trim().toLowerCase();
+  const language = /^[a-z]{2}(_[a-z]{2})?$/.test(rawLang) ? rawLang : '';
+
   if (provider === 'assemblyai') {
     // AssemblyAI keys are 32-char hex-ish strings, no required prefix
     if (apiKey.length < 20) {
       try { fs.unlinkSync(req.file.path); } catch {}
       return res.status(401).json({ error: "That key doesn't look right for AssemblyAI." });
     }
-    return startAssemblyJob(req, res, apiKey);
+    return startAssemblyJob(req, res, apiKey, language);
   }
 
   // OpenAI Whisper path (existing behavior)
@@ -256,6 +262,7 @@ app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
     workDir: null,
     silences: [],
     pathTaken: '',   // 'direct' | 'split-only' | 'full'
+    language,
     createdAt: Date.now(),
     apiKey,
   };
@@ -277,7 +284,7 @@ app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
 // Flow: upload bytes -> submit transcript with speaker_labels -> poll until done.
 // ============================================================================
 
-function startAssemblyJob(req, res, apiKey) {
+function startAssemblyJob(req, res, apiKey, language) {
   const jobId = crypto.randomBytes(12).toString('hex');
   const job = {
     id: jobId,
@@ -296,6 +303,7 @@ function startAssemblyJob(req, res, apiKey) {
     workDir: null,
     chunkInfo: { current: 0, total: 0, usedSilence: 0 },
     pathTaken: 'assemblyai',
+    language: language || '',
     createdAt: Date.now(),
     apiKey,
     assemblyTranscriptId: null,
@@ -340,26 +348,38 @@ async function processAssemblyJob(job) {
   job.message = 'Starting transcription';
   job.progress = 15;
 
+  const submitBody = {
+    audio_url: upload_url,
+    // AssemblyAI now requires speech_models to be set explicitly (the
+    // previous default was removed). This pattern follows their docs
+    // recommendation: try Universal-3 Pro (best accuracy, supports
+    // English/Spanish/French/German/Italian/Portuguese natively); fall
+    // back to Universal-2 for any other language. Pricing is $0.21/hr
+    // for U3 Pro and $0.15/hr for U2, plus $0.02/hr for diarization.
+    speech_models: ['universal-3-pro', 'universal-2'],
+    speaker_labels: true,
+    // Punctuation and formatting are on by default; explicit for clarity.
+    punctuate: true,
+    format_text: true,
+  };
+  if (job.language) {
+    // Explicit language: AssemblyAI routes to the right model and rejects
+    // with a clear error if a feature isn't supported for that language
+    // (better than silently dropping it).
+    submitBody.language_code = job.language;
+  } else {
+    // No language set: detect it. Without this AssemblyAI silently defaults
+    // to en_us, which would mangle non-English audio.
+    submitBody.language_detection = true;
+  }
+
   const submitRes = await fetch('https://api.assemblyai.com/v2/transcript', {
     method: 'POST',
     headers: {
       'Authorization': job.apiKey,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      audio_url: upload_url,
-      // AssemblyAI now requires speech_models to be set explicitly (the
-      // previous default was removed). This pattern follows their docs
-      // recommendation: try Universal-3 Pro (best accuracy, supports
-      // English/Spanish/French/German/Italian/Portuguese natively); fall
-      // back to Universal-2 for any other language. Pricing is $0.21/hr
-      // for U3 Pro and $0.15/hr for U2, plus $0.02/hr for diarization.
-      speech_models: ['universal-3-pro', 'universal-2'],
-      speaker_labels: true,
-      // Punctuation and formatting are on by default; explicit for clarity.
-      punctuate: true,
-      format_text: true,
-    }),
+    body: JSON.stringify(submitBody),
   });
   if (!submitRes.ok) {
     const errText = await safeText(submitRes);
@@ -504,7 +524,7 @@ async function processJob(job) {
       job.stage = 'transcribing';
       job.message = 'Transcribing (fast path)';
       job.chunkInfo = { current: 1, total: 1, usedSilence: 0 };
-      job.transcript = await transcribeFile(job.inputPath, job.apiKey);
+      job.transcript = await transcribeFile(job.inputPath, job.apiKey, job.language);
       job.progress = 1;
       job.status = 'done';
       job.stage  = 'done';
@@ -553,7 +573,7 @@ async function processJob(job) {
       job.chunkInfo = { ...job.chunkInfo, current: i + 1 };
       job.progress = 0.5 + (i / chunkPaths.length) * 0.5;
       job.message = `Transcribing chunk ${i + 1} of ${chunkPaths.length}`;
-      const text = await transcribeFile(chunkPaths[i], job.apiKey);
+      const text = await transcribeFile(chunkPaths[i], job.apiKey, job.language);
       combined = combined ? `${combined} ${text}` : text;
       job.transcript = combined;
     }
@@ -796,14 +816,19 @@ function splitAudio(inputPath, splitPoints, workDir, srcExt) {
 // "Could not parse multipart form" errors.
 // ============================================================================
 
-async function transcribeFile(filePath, apiKey) {
+async function transcribeFile(filePath, apiKey, language) {
   const client = new OpenAI({ apiKey });
   try {
-    const result = await client.audio.transcriptions.create({
+    const params = {
       file: fs.createReadStream(filePath),
       model: 'whisper-1',
       response_format: 'text',
-    });
+    };
+    // Whisper auto-detects language by default; passing a hint when the
+    // user has explicitly chosen one skips that step and slightly improves
+    // accuracy, especially for low-resource languages.
+    if (language) params.language = language;
+    const result = await client.audio.transcriptions.create(params);
     return (typeof result === 'string' ? result : (result && result.text) || '').trim();
   } catch (e) {
     // Surface OpenAI's own error message when possible
