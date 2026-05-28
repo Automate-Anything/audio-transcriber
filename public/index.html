@@ -591,6 +591,247 @@
     .err-inline { color: var(--error); font-family: var(--font-mono); font-size: 12px; text-transform: none; letter-spacing: 0; }
 
     /* Dropzone */
+    /* ===== Record + playback UI ===== */
+    .record-cta {
+      margin-top: 1rem;
+      display: flex; flex-direction: column; gap: 0.85rem;
+      align-items: stretch;
+    }
+    .record-cta.hidden { display: none; }
+    .record-cta-divider {
+      display: flex; align-items: center;
+      font-family: var(--font-mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.3em;
+      color: var(--fg-faint);
+      gap: 0.85rem;
+    }
+    .record-cta-divider::before, .record-cta-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--border);
+    }
+    .record-start-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      gap: 0.7rem;
+      padding: 0.95rem 1.2rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-strong);
+      border-radius: 8px;
+      color: var(--fg);
+      font-family: var(--font-sans);
+      font-size: 0.95rem;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+      width: 100%;
+    }
+    .record-start-btn:hover {
+      background: rgba(239, 68, 68, 0.08);
+      border-color: var(--error);
+      color: var(--fg);
+    }
+    .record-start-btn .rec-dot {
+      width: 10px; height: 10px;
+      background: var(--error);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--error);
+    }
+
+    .recording-panel { padding: 1.5rem 1.25rem; text-align: center; }
+    .recording-panel .rec-state {
+      display: flex; flex-direction: column; align-items: center; gap: 0.85rem;
+      padding: 1.5rem 0 1.75rem;
+    }
+    .recording-panel .rec-state-label {
+      font-size: 10.5px; color: var(--error);
+      letter-spacing: 0.3em;
+    }
+    .recording-panel .rec-state-time {
+      font-family: var(--font-mono);
+      font-size: 3rem;
+      font-weight: 500;
+      color: var(--fg);
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+    }
+    .recording-panel .rec-state-dot {
+      width: 14px; height: 14px;
+      background: var(--error);
+      border-radius: 50%;
+      box-shadow: 0 0 16px var(--error);
+      animation: recPulse 1.1s ease-in-out infinite;
+    }
+    @keyframes recPulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.45; transform: scale(0.78); }
+    }
+    .recording-panel .rec-state-actions {
+      display: flex; gap: 0.75rem; justify-content: center;
+      padding-top: 0.5rem;
+    }
+    .recording-panel .rec-error {
+      margin-top: 1rem;
+      padding: 0.6rem 0.8rem;
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid var(--error);
+      border-radius: 4px;
+      color: var(--error);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    /* Playback panel */
+    .playback-panel { padding: 1.25rem; }
+    .pb-header {
+      display: flex; align-items: baseline; justify-content: space-between;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      padding-bottom: 0.85rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .pb-header-label { color: var(--fg); }
+    .pb-header-meta { color: var(--fg-muted); }
+
+    .pb-controls {
+      display: flex; align-items: center; justify-content: center;
+      gap: 1.5rem;
+      padding: 0.75rem 0 1.25rem;
+    }
+    .pb-icon-btn {
+      position: relative;
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 48px; height: 48px;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 50%;
+      color: var(--fg-muted);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .pb-icon-btn:hover { background: rgba(75, 108, 140, 0.1); color: var(--fg); border-color: var(--accent); }
+    .pb-icon-btn .pb-icon-num {
+      position: absolute;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 600;
+      top: 50%; left: 50%; transform: translate(-50%, -45%);
+      pointer-events: none;
+    }
+    .pb-play-btn {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 64px; height: 64px;
+      background: var(--cta);
+      border: none;
+      border-radius: 50%;
+      color: var(--fg);
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      box-shadow: 0 4px 16px rgba(0, 108, 190, 0.4);
+    }
+    .pb-play-btn:hover { background: #0080dc; transform: scale(1.04); }
+    .pb-play-btn:active { transform: scale(0.96); }
+    .pb-play-btn svg { margin-left: 2px; } /* nudges the play triangle visually centered */
+    .pb-play-btn #pb-pause-icon { margin-left: 0; }
+
+    .pb-scrub-row {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0 0.25rem;
+    }
+    .pb-time {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--fg-muted);
+      font-variant-numeric: tabular-nums;
+      min-width: 3.5em;
+    }
+    .pb-time:last-child { text-align: right; }
+    .pb-scrub {
+      flex: 1;
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 4px;
+      background: var(--border-strong);
+      border-radius: 2px;
+      outline: none;
+      cursor: pointer;
+      background-image: linear-gradient(var(--cta), var(--cta));
+      background-repeat: no-repeat;
+      background-size: 0% 100%;
+    }
+    .pb-scrub::-webkit-slider-thumb {
+      -webkit-appearance: none; appearance: none;
+      width: 16px; height: 16px;
+      background: var(--cta);
+      border-radius: 50%;
+      cursor: pointer;
+      box-shadow: 0 0 0 4px rgba(0, 108, 190, 0.2);
+      transition: box-shadow 0.15s;
+    }
+    .pb-scrub::-webkit-slider-thumb:hover { box-shadow: 0 0 0 6px rgba(0, 108, 190, 0.3); }
+    .pb-scrub::-moz-range-thumb {
+      width: 16px; height: 16px;
+      background: var(--cta);
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    .pb-speed-row {
+      display: flex; align-items: center; gap: 0.85rem;
+      margin-top: 1.5rem;
+      padding: 0.85rem 0;
+      border-top: 1px solid var(--border);
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .pb-speed-label { color: var(--fg-muted); flex-shrink: 0; }
+    .pb-speed-buttons { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .pb-speed-btn {
+      padding: 0.35rem 0.6rem;
+      background: transparent;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--fg-muted);
+      cursor: pointer;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
+    }
+    .pb-speed-btn:hover { background: rgba(75, 108, 140, 0.1); color: var(--fg); border-color: var(--accent); }
+    .pb-speed-btn.active {
+      background: var(--cta);
+      color: var(--fg);
+      border-color: var(--cta);
+    }
+
+    .pb-actions {
+      display: flex; gap: 0.75rem; flex-wrap: wrap;
+      margin-top: 1.25rem;
+    }
+    .pb-actions .btn { flex: 1; min-width: 9rem; }
+
+    .pb-status {
+      margin-top: 0.85rem;
+      padding: 0.55rem 0.8rem;
+      background: rgba(0, 108, 190, 0.08);
+      border: 1px solid var(--border);
+      border-left: 2px solid var(--cta);
+      border-radius: 4px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: #cbd5e1;
+    }
+    .pb-status.error {
+      background: rgba(239, 68, 68, 0.08);
+      border-color: var(--error);
+      color: var(--error);
+    }
+
+    audio#pb-audio { display: none; }
+
     .dropzone { position: relative; display: block; border: 1px dashed var(--border-strong); cursor: pointer; transition: background 0.2s, border-color 0.2s; -webkit-tap-highlight-color: transparent; touch-action: manipulation; background: var(--bg-card); border-radius: 8px; }
     .dropzone:hover { border-color: var(--accent); background: rgba(75, 108, 140, 0.08); }
     .dropzone.drag-over { background: var(--accent); color: var(--fg); border-color: var(--accent); border-style: solid; }
@@ -1149,6 +1390,91 @@
         </div>
       </label>
 
+      <!-- "Or record now" CTA -->
+      <div id="record-cta" class="record-cta">
+        <div class="record-cta-divider"><span>or</span></div>
+        <button id="record-start-btn" type="button" class="record-start-btn">
+          <span class="rec-dot" aria-hidden="true"></span>
+          Record audio now
+        </button>
+      </div>
+
+      <!-- Recording panel (mic active) -->
+      <div id="recording-panel" class="panel hidden recording-panel">
+        <div class="rec-state">
+          <div class="rec-state-label mono-sm">Recording</div>
+          <div class="rec-state-time" id="rec-time">0:00</div>
+          <div class="rec-state-dot" aria-hidden="true"></div>
+        </div>
+        <div class="rec-state-actions">
+          <button id="rec-stop-btn" type="button" class="btn primary">Stop &amp; save</button>
+          <button id="rec-cancel-btn" type="button" class="btn">Cancel</button>
+        </div>
+        <div id="rec-error" class="rec-error hidden"></div>
+      </div>
+
+      <!-- Playback panel (after stop) -->
+      <div id="playback-panel" class="panel hidden playback-panel">
+        <div class="pb-header">
+          <div class="pb-header-label mono-sm">Your recording</div>
+          <div class="pb-header-meta mono-sm" id="pb-meta"></div>
+        </div>
+
+        <audio id="pb-audio" preload="metadata"></audio>
+
+        <div class="pb-controls">
+          <button id="pb-back-btn" class="pb-icon-btn" type="button" aria-label="Skip back 10 seconds">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12a9 9 0 1 0 9-9"/>
+              <path d="M3 4v5h5"/>
+            </svg>
+            <span class="pb-icon-num">10</span>
+          </button>
+          <button id="pb-play-btn" class="pb-play-btn" type="button" aria-label="Play">
+            <svg id="pb-play-icon" width="26" height="26" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true">
+              <path d="M8 5v14l11-7z"/>
+            </svg>
+            <svg id="pb-pause-icon" width="26" height="26" viewBox="0 0 24 24" fill="currentColor" stroke="none" aria-hidden="true" class="hidden">
+              <rect x="6" y="5" width="4" height="14"/>
+              <rect x="14" y="5" width="4" height="14"/>
+            </svg>
+          </button>
+          <button id="pb-fwd-btn" class="pb-icon-btn" type="button" aria-label="Skip forward 10 seconds">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12a9 9 0 1 1-9-9"/>
+              <path d="M21 4v5h-5"/>
+            </svg>
+            <span class="pb-icon-num">10</span>
+          </button>
+        </div>
+
+        <div class="pb-scrub-row">
+          <span id="pb-cur-time" class="pb-time">0:00</span>
+          <input id="pb-scrub" class="pb-scrub" type="range" min="0" max="1000" value="0" step="1" aria-label="Seek">
+          <span id="pb-total-time" class="pb-time">0:00</span>
+        </div>
+
+        <div class="pb-speed-row">
+          <span class="pb-speed-label mono-sm">Speed</span>
+          <div class="pb-speed-buttons" role="radiogroup" aria-label="Playback speed">
+            <button type="button" class="pb-speed-btn" data-speed="0.5">0.5×</button>
+            <button type="button" class="pb-speed-btn" data-speed="0.75">0.75×</button>
+            <button type="button" class="pb-speed-btn active" data-speed="1">1×</button>
+            <button type="button" class="pb-speed-btn" data-speed="1.25">1.25×</button>
+            <button type="button" class="pb-speed-btn" data-speed="1.5">1.5×</button>
+            <button type="button" class="pb-speed-btn" data-speed="2">2×</button>
+          </div>
+        </div>
+
+        <div class="pb-actions">
+          <button id="pb-use-btn" class="btn primary" type="button">Use for transcription</button>
+          <button id="pb-download-btn" class="btn" type="button">Download MP3</button>
+          <button id="pb-redo-btn" class="btn" type="button">Re-record</button>
+        </div>
+
+        <div id="pb-status" class="pb-status hidden"></div>
+      </div>
+
       <!-- File panel -->
       <div id="file-panel" class="panel hidden fade-up" style="margin-top: 1rem;">
         <div class="file-row">
@@ -1348,6 +1674,10 @@
       </div>
     </div>
   </div>
+
+  <!-- lamejs (MP3 encoder) loaded lazily by the recording feature to keep
+       initial page weight low. Bundled locally to avoid CDN dependency
+       and to keep script-src 'self' in CSP. LGPL — see /lamejs.min.js -->
 
   <script>
   (function () {
@@ -1697,6 +2027,7 @@
     // ============================================================================
     function render() {
       $('dropzone').classList.toggle('hidden', !!state.file);
+      $('record-cta').classList.toggle('hidden', !!state.file);
       $('file-panel').classList.toggle('hidden', !state.file);
 
       if (state.file) {
@@ -2111,6 +2442,385 @@
       handleFile(e.dataTransfer.files?.[0]);
     });
     fileInput.addEventListener('change', (e) => handleFile(e.target.files?.[0]));
+
+    // ============================================================================
+    // Record + playback feature
+    // ============================================================================
+    const rec = {
+      stream: null,       // active MediaStream
+      recorder: null,     // active MediaRecorder
+      chunks: [],         // collected Blob chunks during recording
+      mime: '',           // mime type the recorder chose
+      startedAt: 0,
+      timerHandle: null,
+      blob: null,         // final recording blob
+      blobUrl: null,      // object URL for the audio element
+      duration: 0,        // seconds, set after metadata loads
+      lameLoaded: false,  // lazy-load flag for lamejs
+    };
+
+    function setRecorderView(view) {
+      // view: 'idle' | 'recording' | 'playback'
+      $('dropzone').classList.toggle('hidden', view !== 'idle' || !!state.file);
+      $('record-cta').classList.toggle('hidden', view !== 'idle' || !!state.file);
+      $('recording-panel').classList.toggle('hidden', view !== 'recording');
+      $('playback-panel').classList.toggle('hidden', view !== 'playback');
+    }
+
+    function showRecError(msg) {
+      const el = $('rec-error');
+      el.textContent = msg;
+      el.classList.remove('hidden');
+    }
+    function hideRecError() {
+      $('rec-error').classList.add('hidden');
+    }
+
+    function pickRecorderMime() {
+      // Prefer formats we know transcription accepts. MediaRecorder picks
+      // for us if we don't specify, but the default varies by browser.
+      const candidates = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/mp4;codecs=mp4a.40.2', // Safari
+        'audio/mp4',
+        'audio/ogg;codecs=opus',
+      ];
+      for (const c of candidates) {
+        if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(c)) return c;
+      }
+      return '';
+    }
+
+    function extForMime(mime) {
+      if (!mime) return 'webm';
+      if (mime.includes('webm')) return 'webm';
+      if (mime.includes('mp4')) return 'm4a';
+      if (mime.includes('ogg')) return 'ogg';
+      return 'webm';
+    }
+
+    async function startRecording() {
+      hideRecError();
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        showRecError("Your browser doesn't support recording. Try Chrome, Firefox, or Safari.");
+        return;
+      }
+      if (typeof MediaRecorder === 'undefined') {
+        showRecError("Your browser doesn't support MediaRecorder.");
+        return;
+      }
+      try {
+        rec.stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true,
+          },
+        });
+      } catch (e) {
+        const msg = e && e.name === 'NotAllowedError'
+          ? 'Microphone access denied. Allow it in your browser settings to record.'
+          : (e && e.name === 'NotFoundError'
+            ? 'No microphone found. Plug one in and try again.'
+            : 'Could not start the microphone. ' + (e && e.message ? e.message : ''));
+        showRecError(msg);
+        setRecorderView('idle');
+        return;
+      }
+
+      rec.mime = pickRecorderMime();
+      const opts = rec.mime ? { mimeType: rec.mime } : {};
+      try {
+        rec.recorder = new MediaRecorder(rec.stream, opts);
+      } catch (e) {
+        showRecError('Could not start recording: ' + (e && e.message ? e.message : 'unknown error'));
+        teardownStream();
+        return;
+      }
+      rec.chunks = [];
+      rec.recorder.addEventListener('dataavailable', (e) => {
+        if (e.data && e.data.size > 0) rec.chunks.push(e.data);
+      });
+      rec.recorder.addEventListener('stop', onRecordingStopped);
+      rec.recorder.addEventListener('error', (e) => {
+        showRecError('Recorder error: ' + (e && e.error && e.error.message ? e.error.message : 'unknown'));
+      });
+
+      rec.startedAt = Date.now();
+      $('rec-time').textContent = '0:00';
+      startRecTimer();
+      // 1-second timeslice so chunks arrive while recording and the final
+      // blob assembly is deterministic
+      rec.recorder.start(1000);
+      setRecorderView('recording');
+    }
+
+    function startRecTimer() {
+      stopRecTimer();
+      rec.timerHandle = setInterval(() => {
+        const s = Math.floor((Date.now() - rec.startedAt) / 1000);
+        const m = Math.floor(s / 60), sec = s % 60;
+        $('rec-time').textContent = m + ':' + String(sec).padStart(2, '0');
+      }, 250);
+    }
+    function stopRecTimer() {
+      if (rec.timerHandle) { clearInterval(rec.timerHandle); rec.timerHandle = null; }
+    }
+
+    function teardownStream() {
+      if (rec.stream) {
+        rec.stream.getTracks().forEach(t => { try { t.stop(); } catch {} });
+        rec.stream = null;
+      }
+    }
+
+    function stopRecording() {
+      if (!rec.recorder || rec.recorder.state === 'inactive') return;
+      // The 'stop' event handler does the rest
+      try { rec.recorder.stop(); } catch {}
+      stopRecTimer();
+      teardownStream();
+    }
+
+    function cancelRecording() {
+      stopRecTimer();
+      teardownStream();
+      if (rec.recorder && rec.recorder.state !== 'inactive') {
+        // Detach handlers we don't want to fire on cancel
+        rec.recorder.onstop = null;
+        try { rec.recorder.stop(); } catch {}
+      }
+      rec.recorder = null;
+      rec.chunks = [];
+      setRecorderView('idle');
+    }
+
+    function onRecordingStopped() {
+      const blob = new Blob(rec.chunks, { type: rec.mime || 'audio/webm' });
+      rec.blob = blob;
+      if (rec.blobUrl) URL.revokeObjectURL(rec.blobUrl);
+      rec.blobUrl = URL.createObjectURL(blob);
+      const audio = $('pb-audio');
+      audio.src = rec.blobUrl;
+      audio.playbackRate = 1.0;
+      $('pb-meta').textContent = fmtBytes(blob.size);
+      // Reset playback UI
+      $('pb-play-icon').classList.remove('hidden');
+      $('pb-pause-icon').classList.add('hidden');
+      $('pb-cur-time').textContent = '0:00';
+      $('pb-total-time').textContent = '0:00';
+      $('pb-scrub').value = 0;
+      $('pb-scrub').style.backgroundSize = '0% 100%';
+      $('pb-status').classList.add('hidden');
+      // Reset speed buttons
+      document.querySelectorAll('.pb-speed-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.speed === '1');
+      });
+      setRecorderView('playback');
+    }
+
+    // ============================================================================
+    // Playback controls
+    // ============================================================================
+    function setPlayIconState(playing) {
+      $('pb-play-icon').classList.toggle('hidden', playing);
+      $('pb-pause-icon').classList.toggle('hidden', !playing);
+      $('pb-play-btn').setAttribute('aria-label', playing ? 'Pause' : 'Play');
+    }
+
+    function wirePlayback() {
+      const audio = $('pb-audio');
+      const scrub = $('pb-scrub');
+
+      audio.addEventListener('loadedmetadata', () => {
+        // Some browsers return Infinity for webm duration until you seek
+        const d = audio.duration;
+        rec.duration = (isFinite(d) && d > 0) ? d : 0;
+        $('pb-total-time').textContent = fmtPbTime(rec.duration);
+      });
+      audio.addEventListener('durationchange', () => {
+        const d = audio.duration;
+        if (isFinite(d) && d > 0) {
+          rec.duration = d;
+          $('pb-total-time').textContent = fmtPbTime(d);
+        }
+      });
+      audio.addEventListener('timeupdate', () => {
+        const t = audio.currentTime;
+        $('pb-cur-time').textContent = fmtPbTime(t);
+        if (rec.duration > 0) {
+          const pct = (t / rec.duration) * 100;
+          scrub.value = Math.round(pct * 10);
+          scrub.style.backgroundSize = pct + '% 100%';
+        }
+      });
+      audio.addEventListener('ended', () => setPlayIconState(false));
+      audio.addEventListener('play', () => setPlayIconState(true));
+      audio.addEventListener('pause', () => setPlayIconState(false));
+
+      $('pb-play-btn').addEventListener('click', () => {
+        if (audio.paused) audio.play().catch(() => {});
+        else audio.pause();
+      });
+
+      $('pb-back-btn').addEventListener('click', () => {
+        audio.currentTime = Math.max(0, audio.currentTime - 10);
+      });
+      $('pb-fwd-btn').addEventListener('click', () => {
+        if (rec.duration > 0) {
+          audio.currentTime = Math.min(rec.duration, audio.currentTime + 10);
+        } else {
+          audio.currentTime += 10;
+        }
+      });
+
+      scrub.addEventListener('input', () => {
+        if (rec.duration > 0) {
+          const pct = scrub.value / 10;
+          audio.currentTime = (pct / 100) * rec.duration;
+          scrub.style.backgroundSize = pct + '% 100%';
+        }
+      });
+
+      document.querySelectorAll('.pb-speed-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const rate = parseFloat(btn.dataset.speed);
+          audio.playbackRate = rate;
+          document.querySelectorAll('.pb-speed-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+        });
+      });
+    }
+
+    function fmtPbTime(s) {
+      if (!isFinite(s) || s < 0) return '0:00';
+      const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+      return m + ':' + String(sec).padStart(2, '0');
+    }
+
+    // ============================================================================
+    // Recording -> File (for transcription pipeline)
+    // ============================================================================
+    function useRecordingAsFile() {
+      if (!rec.blob) return;
+      const ext = extForMime(rec.mime);
+      const fname = 'recording-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.' + ext;
+      // Construct a File from the Blob so the existing pipeline treats it
+      // like any other uploaded file
+      const file = new File([rec.blob], fname, { type: rec.blob.type || 'audio/webm' });
+      // Clean up recording UI and feed into normal flow
+      setRecorderView('idle');
+      handleFile(file);
+    }
+
+    // ============================================================================
+    // MP3 conversion (using lamejs, lazy-loaded)
+    // ============================================================================
+    function loadLamejs() {
+      if (rec.lameLoaded || (typeof lamejs !== 'undefined')) {
+        rec.lameLoaded = true;
+        return Promise.resolve();
+      }
+      return new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = '/lamejs.min.js';
+        s.onload = () => { rec.lameLoaded = true; resolve(); };
+        s.onerror = () => reject(new Error('Could not load the MP3 encoder.'));
+        document.head.appendChild(s);
+      });
+    }
+
+    async function downloadAsMp3() {
+      const status = $('pb-status');
+      status.classList.remove('hidden', 'error');
+      status.textContent = 'Loading MP3 encoder…';
+      try {
+        await loadLamejs();
+        status.textContent = 'Decoding audio…';
+
+        // Decode the recording to PCM via AudioContext
+        const arrayBuffer = await rec.blob.arrayBuffer();
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) throw new Error('AudioContext not supported in this browser.');
+        const audioCtx = new AudioCtx();
+        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+        try { audioCtx.close(); } catch {}
+
+        status.textContent = 'Encoding MP3…';
+        // Allow the UI to update before the encoding loop blocks the thread
+        await new Promise(r => setTimeout(r, 30));
+
+        const sampleRate = audioBuffer.sampleRate;
+        const channels = Math.min(audioBuffer.numberOfChannels, 2);
+        const kbps = 128;
+        const encoder = new lamejs.Mp3Encoder(channels, sampleRate, kbps);
+
+        // Float32 [-1, 1] -> Int16 PCM
+        const left = floatTo16BitPCM(audioBuffer.getChannelData(0));
+        const right = channels > 1 ? floatTo16BitPCM(audioBuffer.getChannelData(1)) : null;
+
+        const mp3Data = [];
+        const blockSize = 1152;
+        for (let i = 0; i < left.length; i += blockSize) {
+          const leftChunk = left.subarray(i, i + blockSize);
+          const rightChunk = right ? right.subarray(i, i + blockSize) : null;
+          const mp3buf = rightChunk
+            ? encoder.encodeBuffer(leftChunk, rightChunk)
+            : encoder.encodeBuffer(leftChunk);
+          if (mp3buf.length > 0) mp3Data.push(mp3buf);
+        }
+        const flushBuf = encoder.flush();
+        if (flushBuf.length > 0) mp3Data.push(flushBuf);
+
+        const blob = new Blob(mp3Data, { type: 'audio/mpeg' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'recording-' + new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-') + '.mp3';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+
+        status.textContent = '✓ Downloaded ' + fmtBytes(blob.size);
+        setTimeout(() => status.classList.add('hidden'), 4000);
+      } catch (e) {
+        status.classList.add('error');
+        status.textContent = 'MP3 export failed: ' + (e && e.message ? e.message : 'unknown error');
+      }
+    }
+
+    function floatTo16BitPCM(float32) {
+      const out = new Int16Array(float32.length);
+      for (let i = 0; i < float32.length; i++) {
+        const s = Math.max(-1, Math.min(1, float32[i]));
+        out[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+      }
+      return out;
+    }
+
+    // ============================================================================
+    // Wire record + playback buttons
+    // ============================================================================
+    $('record-start-btn').addEventListener('click', startRecording);
+    $('rec-stop-btn').addEventListener('click', stopRecording);
+    $('rec-cancel-btn').addEventListener('click', cancelRecording);
+    $('pb-use-btn').addEventListener('click', useRecordingAsFile);
+    $('pb-download-btn').addEventListener('click', downloadAsMp3);
+    $('pb-redo-btn').addEventListener('click', () => {
+      // Clean up current recording, return to record CTA
+      if (rec.blobUrl) { URL.revokeObjectURL(rec.blobUrl); rec.blobUrl = null; }
+      rec.blob = null;
+      rec.duration = 0;
+      $('pb-audio').src = '';
+      setRecorderView('idle');
+    });
+    wirePlayback();
+
+    // ============================================================================
+    // File wiring (existing)
+    // ============================================================================
 
     function handleFile(f) {
       if (!f) return;
