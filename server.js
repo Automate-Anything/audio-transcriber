@@ -122,6 +122,11 @@ const jobsLimiter = rateLimit({
   windowMs: 60 * 1000, max: 240, // polling can be busy
   standardHeaders: true, legacyHeaders: false,
 });
+const postProcessLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, max: 60, // summary/actions/translate calls per hour
+  standardHeaders: true, legacyHeaders: false,
+  message: { error: 'You\'ve hit the hourly limit for summary/translation on this server.' },
+});
 
 app.use(express.json({ limit: '64kb' }));
 app.use(express.static('public'));
@@ -503,6 +508,84 @@ app.get('/api/jobs/:id', jobsLimiter, (req, res) => {
     originalName: job.originalName,
     pathTaken: job.pathTaken,
   });
+});
+
+// ============================================================================
+// Post-processing: summary / action items / translation
+// Uses the user's OpenAI key (Bearer header). Transcript is sent in the
+// request body — larger json limit applied to this route only.
+// ============================================================================
+app.post('/api/post-process', postProcessLimiter, express.json({ limit: '4mb' }), async (req, res) => {
+  const auth = req.headers.authorization || '';
+  const apiKey = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (!apiKey.startsWith('sk-') || apiKey.length < 20) {
+    return res.status(401).json({ error: 'A valid OpenAI key is required for summary, action items, and translation.' });
+  }
+  const transcript = (req.body.transcript || '').toString().trim();
+  const tasks = Array.isArray(req.body.tasks) ? req.body.tasks : [];
+  const targetLanguage = (req.body.targetLanguage || '').toString().trim().slice(0, 40);
+  if (!transcript) return res.status(400).json({ error: 'No transcript provided.' });
+  if (!tasks.length) return res.status(400).json({ error: 'No tasks requested.' });
+
+  // Guard against absurd input. gpt-4o-mini has a 128k context, but keep a
+  // sane ceiling — ~400k chars is roughly 100k tokens.
+  const text = transcript.slice(0, 400000);
+
+  const client = new OpenAI({ apiKey });
+  const result = {};
+
+  try {
+    const wantSummary = tasks.includes('summary');
+    const wantActions = tasks.includes('actions');
+
+    if (wantSummary || wantActions) {
+      const fields = [];
+      if (wantSummary) fields.push('"summary": a concise prose summary (3-6 sentences) of the key points');
+      if (wantActions) fields.push('"actionItems": an array of clear action item strings (empty array if none)');
+      const sys = 'You are a precise meeting/transcript assistant. Respond with a single JSON object and nothing else.';
+      const prompt =
+        `From the transcript below, produce a JSON object with these fields:\n` +
+        fields.map(f => '- ' + f).join('\n') +
+        `\n\nReturn only valid JSON. Transcript:\n"""\n${text}\n"""`;
+      const completion = await client.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [{ role: 'system', content: sys }, { role: 'user', content: prompt }],
+        response_format: { type: 'json_object' },
+        max_tokens: 1200,
+        temperature: 0.3,
+      });
+      let parsed = {};
+      try { parsed = JSON.parse(completion.choices[0].message.content); } catch {}
+      if (wantSummary) result.summary = (parsed.summary || '').toString().trim();
+      if (wantActions) result.actionItems = Array.isArray(parsed.actionItems)
+        ? parsed.actionItems.map(s => s.toString().trim()).filter(Boolean) : [];
+    }
+
+    if (tasks.includes('translate')) {
+      const lang = targetLanguage || 'English';
+      const completion = await client.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          { role: 'system', content: `You are a translator. Translate the user's transcript into ${lang}. Preserve speaker labels and line breaks. Output only the translation, no preamble.` },
+          { role: 'user', content: text },
+        ],
+        max_tokens: 8000,
+        temperature: 0.2,
+      });
+      result.translation = (completion.choices[0].message.content || '').trim();
+      result.translationLanguage = lang;
+    }
+
+    res.json(result);
+  } catch (e) {
+    const msg = (e && (e.message || (e.error && e.error.message))) || 'Post-processing failed.';
+    // Sanitize common OpenAI errors
+    let clean = msg;
+    if (/api key/i.test(msg) || /invalid_api_key/i.test(msg)) clean = 'OpenAI rejected the key.';
+    else if (/quota/i.test(msg) || /insufficient/i.test(msg)) clean = 'Your OpenAI account is out of quota for this request.';
+    else if (/rate limit/i.test(msg)) clean = 'OpenAI rate limit hit — wait a moment and retry.';
+    res.status(502).json({ error: clean });
+  }
 });
 
 // ============================================================================

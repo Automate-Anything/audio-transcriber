@@ -1214,6 +1214,35 @@
     }
     .history-item-del:hover { color: var(--error); border-color: var(--error); }
     .history-note { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--fg-faint); margin-top: 0.85rem; }
+    /* AI extras */
+    .ai-extras { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border); }
+    .ai-extras-head { color: var(--fg-soft); margin-bottom: 0.7rem; }
+    .ai-extras-note { color: var(--fg-faint); text-transform: none; letter-spacing: 0.05em; }
+    .ai-extras-options { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; }
+    .ai-check { display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer; font-family: var(--font-sans); font-size: 14px; color: var(--fg); }
+    .ai-check input { width: 16px; height: 16px; accent-color: var(--cta); cursor: pointer; }
+    .ai-translate-lang {
+      padding: 0.35rem 0.6rem; background: var(--bg-input);
+      border: 1px solid var(--border-strong); border-radius: 4px; color: var(--fg);
+      font-family: var(--font-sans); font-size: 13px; cursor: pointer;
+    }
+    .ai-translate-lang:disabled { opacity: 0.45; cursor: not-allowed; }
+    .ai-results { margin-top: 1rem; display: flex; flex-direction: column; gap: 1rem; }
+    .ai-results-status {
+      padding: 0.6rem 0.9rem; border-radius: 6px;
+      background: rgba(0,108,190,0.08); border: 1px solid var(--border); border-left: 2px solid var(--cta);
+      font-family: var(--font-mono); font-size: 12px; color: var(--fg-soft);
+    }
+    .ai-results-status.error { background: rgba(239,68,68,0.08); border-color: var(--error); border-left-color: var(--error); color: var(--error); }
+    .ai-block { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px; padding: 1.1rem 1.25rem; }
+    .ai-block-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.6rem; }
+    .ai-block-head .mono-sm { color: var(--cta); }
+    .ai-copy { background: transparent; border: 1px solid var(--border); border-radius: 4px; color: var(--fg-muted); font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; padding: 0.25rem 0.5rem; cursor: pointer; transition: color 0.15s, border-color 0.15s; }
+    .ai-copy:hover { color: var(--fg); border-color: var(--accent); }
+    .ai-block-text { font-family: var(--font-serif); font-size: 1.02rem; line-height: 1.7; color: var(--fg); white-space: pre-wrap; }
+    .ai-block-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+    .ai-block-list li { font-family: var(--font-sans); font-size: 14px; line-height: 1.5; color: var(--fg); padding-left: 1.4rem; position: relative; }
+    .ai-block-list li::before { content: '→'; position: absolute; left: 0; color: var(--cta); }
     .tx-body { padding: 2rem 1.5rem; max-height: 60vh; overflow-y: auto; background: var(--bg-alt); }
     @media (min-width: 768px) { .tx-body { padding: 3rem 2.5rem; } }
     .tx-body p { font-family: var(--font-serif); font-weight: 400; font-size: 1.05rem; line-height: 1.7; white-space: pre-wrap; color: var(--fg); }
@@ -1905,6 +1934,28 @@
           </div>
         </div>
 
+        <!-- AI extras (optional, OpenAI key required) -->
+        <div id="ai-extras" class="ai-extras hidden">
+          <div class="ai-extras-head mono-sm">AI extras <span class="ai-extras-note">— optional, uses your OpenAI credits</span></div>
+          <div class="ai-extras-options">
+            <label class="ai-check"><input type="checkbox" id="opt-summary"> <span>Summary</span></label>
+            <label class="ai-check"><input type="checkbox" id="opt-actions"> <span>Action items</span></label>
+            <label class="ai-check"><input type="checkbox" id="opt-translate"> <span>Translate to</span></label>
+            <select id="opt-translate-lang" class="ai-translate-lang" aria-label="Translation target language" disabled>
+              <option value="English">English</option>
+              <option value="Hebrew">Hebrew</option>
+              <option value="Spanish">Spanish</option>
+              <option value="French">French</option>
+              <option value="German">German</option>
+              <option value="Arabic">Arabic</option>
+              <option value="Russian">Russian</option>
+              <option value="Chinese">Chinese</option>
+              <option value="Portuguese">Portuguese</option>
+              <option value="Italian">Italian</option>
+            </select>
+          </div>
+        </div>
+
         <!-- Path picker -->
         <div id="path-picker" class="path-picker hidden">
           <div class="path-picker-head">How would you like to process this file?</div>
@@ -1990,6 +2041,23 @@
           <div class="tx-body" id="tx-body-root">
             <p id="transcript-text"></p>
             <div id="transcript-turns" class="turns hidden"></div>
+          </div>
+        </div>
+
+        <!-- AI extras results -->
+        <div id="ai-results" class="ai-results hidden">
+          <div id="ai-results-status" class="ai-results-status hidden"></div>
+          <div id="ai-summary-block" class="ai-block hidden">
+            <div class="ai-block-head"><span class="mono-sm">Summary</span><button class="ai-copy" data-target="ai-summary-text" type="button">Copy</button></div>
+            <p id="ai-summary-text" class="ai-block-text"></p>
+          </div>
+          <div id="ai-actions-block" class="ai-block hidden">
+            <div class="ai-block-head"><span class="mono-sm">Action items</span><button class="ai-copy" data-target="ai-actions-list" type="button">Copy</button></div>
+            <ul id="ai-actions-list" class="ai-block-list"></ul>
+          </div>
+          <div id="ai-translation-block" class="ai-block hidden">
+            <div class="ai-block-head"><span class="mono-sm" id="ai-translation-label">Translation</span><button class="ai-copy" data-target="ai-translation-text" type="button">Copy</button></div>
+            <p id="ai-translation-text" class="ai-block-text"></p>
           </div>
         </div>
       </div>
@@ -2453,6 +2521,8 @@
         state.stage = 'error'; render(); return;
       }
       state.error = ''; state.transcript = ''; state.utterances = null; state.segments = null; state.speakerNames = {};
+      // Reset AI extras results panel
+      ['ai-results','ai-summary-block','ai-actions-block','ai-translation-block','ai-results-status'].forEach(id => $(id) && $(id).classList.add('hidden'));
       state.uploadProgress = 0; state.serverProgress = 0;
       state.message = 'Uploading'; state.stage = 'uploading';
       state.chunkInfo = { current: 0, total: 0, usedSilence: 0 };
@@ -2490,6 +2560,8 @@
         state.segments = final.segments || state.segments;
         render();
         addToHistory();
+        // Fire optional AI extras if the user checked any boxes
+        runPostProcessing();
       } catch (e) {
         state.error = e.message || 'Something went wrong.';
         state.stage = 'error'; render();
@@ -2515,6 +2587,9 @@
         $('run-btn').disabled = busy || !haveKey;
         $('change-btn').disabled = busy;
         $('run-btn').textContent = busy ? 'Working...' : (haveKey ? 'Transcribe' : 'Add key first');
+
+        // AI extras require an OpenAI key (used for chat completions).
+        $('ai-extras').classList.toggle('hidden', !state.openaiKey || busy);
       }
 
       renderPathPicker();
@@ -2944,6 +3019,89 @@
       const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
       applyTheme(next);
       try { localStorage.setItem(THEME_STORAGE, next); } catch {}
+    });
+
+    // ============================================================================
+    // AI extras: summary / action items / translation (optional, OpenAI key)
+    // ============================================================================
+    $('opt-translate').addEventListener('change', (e) => {
+      $('opt-translate-lang').disabled = !e.target.checked;
+    });
+
+    function aiResultsStatus(msg, isError) {
+      const el = $('ai-results-status');
+      el.classList.remove('hidden');
+      el.classList.toggle('error', !!isError);
+      el.textContent = msg;
+    }
+
+    async function runPostProcessing() {
+      const tasks = [];
+      if ($('opt-summary').checked) tasks.push('summary');
+      if ($('opt-actions').checked) tasks.push('actions');
+      if ($('opt-translate').checked) tasks.push('translate');
+      if (!tasks.length) return; // nothing requested
+      if (!state.openaiKey) return; // shouldn't happen — extras hidden without it
+
+      const transcript = (Array.isArray(state.utterances) && state.utterances.length)
+        ? diarizedToText() : state.transcript;
+      if (!transcript.trim()) return;
+
+      $('ai-results').classList.remove('hidden');
+      aiResultsStatus('Generating ' + tasks.map(t => t === 'actions' ? 'action items' : t).join(' + ') + '…', false);
+
+      try {
+        const resp = await fetch(`${apiBase()}/api/post-process`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.openaiKey },
+          body: JSON.stringify({
+            transcript,
+            tasks,
+            targetLanguage: $('opt-translate-lang').value,
+          }),
+        });
+        const data = await resp.json();
+        if (!resp.ok) throw new Error(data.error || 'Request failed.');
+
+        $('ai-results-status').classList.add('hidden');
+
+        // Summary
+        if (data.summary != null) {
+          $('ai-summary-block').classList.remove('hidden');
+          $('ai-summary-text').textContent = data.summary;
+        }
+        // Action items
+        if (Array.isArray(data.actionItems)) {
+          $('ai-actions-block').classList.remove('hidden');
+          const ul = $('ai-actions-list'); ul.innerHTML = '';
+          if (data.actionItems.length === 0) {
+            const li = document.createElement('li'); li.textContent = 'No action items identified.'; ul.appendChild(li);
+          } else {
+            data.actionItems.forEach(a => { const li = document.createElement('li'); li.textContent = a; ul.appendChild(li); });
+          }
+        }
+        // Translation
+        if (data.translation != null) {
+          $('ai-translation-block').classList.remove('hidden');
+          $('ai-translation-label').textContent = 'Translation' + (data.translationLanguage ? ` (${data.translationLanguage})` : '');
+          $('ai-translation-text').textContent = data.translation;
+        }
+      } catch (e) {
+        aiResultsStatus(e.message || 'Post-processing failed.', true);
+      }
+    }
+
+    // Copy buttons for AI result blocks
+    document.querySelectorAll('.ai-copy').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const target = $(btn.dataset.target);
+        if (!target) return;
+        const text = target.tagName === 'UL'
+          ? [...target.querySelectorAll('li')].map(li => '• ' + li.textContent).join('\n')
+          : target.textContent;
+        try { await navigator.clipboard.writeText(text); } catch {}
+        const old = btn.textContent; btn.textContent = 'Copied'; setTimeout(() => btn.textContent = old, 1500);
+      });
     });
 
     $('history-clear').addEventListener('click', () => {
