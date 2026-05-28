@@ -293,10 +293,16 @@
     }
     .topnav-hamburger:hover { background: rgba(75, 108, 140, 0.1); }
     @media (min-width: 1024px) { .topnav-hamburger { display: none; } }
-    .topnav-hamburger span { display: block; width: 20px; height: 2px; background: var(--aa-text); border-radius: 1px; }
-    /* When the mobile menu is open, hide the hamburger entirely — the
-       only close affordance is the explicit X inside the menu. */
-    .topnav.open .topnav-hamburger { opacity: 0; pointer-events: none; }
+    .topnav-hamburger span { display: block; width: 20px; height: 2px; background: var(--aa-text); border-radius: 1px; transition: transform 0.25s, opacity 0.2s; }
+    /* When the menu is open, the hamburger stays put (it lives in the header
+       bar which sits above the menu overlay, so it's always tappable) and
+       morphs into an X. Tapping it closes the menu. */
+    .topnav.open .topnav-hamburger span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+    .topnav.open .topnav-hamburger span:nth-child(2) { opacity: 0; }
+    .topnav.open .topnav-hamburger span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+    /* The separate in-menu close button is redundant now and sits beneath the
+       header bar (so it can't receive taps) — hide it. */
+    .topnav-mobile-close { display: none !important; }
 
     /* Mobile menu (full-screen slide-in) */
     .topnav-mobile {
