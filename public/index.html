@@ -1118,6 +1118,37 @@
     }
     .tx-body.editing { background: var(--bg-alt); }
     .edit-hint { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.2em; color: var(--cta); padding: 0 1.5rem 0.5rem; }
+    /* History */
+    .history-section { margin-top: 2rem; padding-top: 1.5rem; border-top: 1px solid var(--border); }
+    .history-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.85rem; }
+    .history-clear {
+      background: transparent; border: none; cursor: pointer;
+      font-family: var(--font-mono); font-size: 10px; text-transform: uppercase;
+      letter-spacing: 0.15em; color: var(--fg-muted); transition: color 0.15s;
+    }
+    .history-clear:hover { color: var(--error); }
+    .history-list { display: flex; flex-direction: column; gap: 0.6rem; }
+    .history-item {
+      display: flex; align-items: center; gap: 0.85rem;
+      padding: 0.75rem 1rem;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 6px; transition: border-color 0.15s, background 0.15s;
+    }
+    .history-item:hover { border-color: var(--accent); }
+    .history-item-main { flex: 1; min-width: 0; cursor: pointer; }
+    .history-item-name {
+      font-family: var(--font-serif); font-size: 1rem; color: var(--fg);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .history-item-meta { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; color: var(--fg-muted); margin-top: 0.2rem; text-transform: uppercase; }
+    .history-badge { color: var(--cta); }
+    .history-item-del {
+      background: transparent; border: 1px solid var(--border); border-radius: 4px;
+      color: var(--fg-muted); cursor: pointer; padding: 0.3rem 0.55rem; flex-shrink: 0;
+      font-family: var(--font-mono); font-size: 11px; transition: color 0.15s, border-color 0.15s;
+    }
+    .history-item-del:hover { color: var(--error); border-color: var(--error); }
+    .history-note { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--fg-faint); margin-top: 0.85rem; }
     .tx-body { padding: 2rem 1.5rem; max-height: 60vh; overflow-y: auto; background: var(--bg-alt); }
     @media (min-width: 768px) { .tx-body { padding: 3rem 2.5rem; } }
     .tx-body p { font-family: var(--font-serif); font-weight: 400; font-size: 1.05rem; line-height: 1.7; white-space: pre-wrap; color: var(--fg); }
@@ -1882,6 +1913,16 @@
         </div>
       </div>
 
+      <!-- Recent transcripts (localStorage history) -->
+      <section id="history-section" class="history-section hidden">
+        <div class="history-head">
+          <div class="mono-sm">Recent transcripts</div>
+          <button id="history-clear" class="history-clear" type="button">Clear all</button>
+        </div>
+        <div id="history-list" class="history-list"></div>
+        <div class="history-note">Stored only in this browser. Nothing is uploaded.</div>
+      </section>
+
     </div>
   </main>
 
@@ -2083,6 +2124,8 @@
     const REC_TYPE_STORAGE = 'recording_type';
     const LANG_STORAGE = 'audio_language';
     const KEYTERMS_STORAGE = 'keyterms';
+    const HISTORY_STORAGE = 'transcript_history';
+    const HISTORY_MAX = 10;
     const SERVER_URL_STORAGE = 'custom_server_url';
     const PAIRING_STORAGE = 'pairing_in_progress';
 
@@ -2364,6 +2407,7 @@
         state.utterances = final.utterances || state.utterances;
         state.segments = final.segments || state.segments;
         render();
+        addToHistory();
       } catch (e) {
         state.error = e.message || 'Something went wrong.';
         state.stage = 'error'; render();
@@ -2686,6 +2730,94 @@
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
+
+    // ============================================================================
+    // Transcript history (localStorage)
+    // ============================================================================
+    function loadHistory() {
+      try { return JSON.parse(localStorage.getItem(HISTORY_STORAGE) || '[]'); }
+      catch { return []; }
+    }
+    function saveHistory(list) {
+      try { localStorage.setItem(HISTORY_STORAGE, JSON.stringify(list)); }
+      catch (e) {
+        // Likely quota exceeded — drop the oldest and retry once
+        if (list.length > 1) { list.pop(); saveHistory(list); }
+      }
+    }
+    function addToHistory() {
+      const hasContent = !!state.transcript || (Array.isArray(state.utterances) && state.utterances.length);
+      if (!hasContent) return;
+      const entry = {
+        id: 'h' + Date.now(),
+        name: state.file?.name || 'Recording',
+        date: Date.now(),
+        provider: (Array.isArray(state.utterances) && state.utterances.length) ? 'assemblyai' : 'openai',
+        transcript: state.transcript || '',
+        // Cap stored utterances/segments to keep localStorage manageable
+        utterances: Array.isArray(state.utterances) ? state.utterances : null,
+        segments: Array.isArray(state.segments) ? state.segments : null,
+        speakerNames: state.speakerNames || {},
+      };
+      const list = loadHistory();
+      list.unshift(entry);
+      while (list.length > HISTORY_MAX) list.pop();
+      saveHistory(list);
+      renderHistory();
+    }
+    function deleteHistory(id) {
+      saveHistory(loadHistory().filter(e => e.id !== id));
+      renderHistory();
+    }
+    function restoreHistory(id) {
+      const entry = loadHistory().find(e => e.id === id);
+      if (!entry) return;
+      state.transcript = entry.transcript || '';
+      state.utterances = entry.utterances || null;
+      state.segments = entry.segments || null;
+      state.speakerNames = entry.speakerNames || {};
+      state._speakerIdxMap = {};
+      state.stage = 'done';
+      state.file = state.file || { name: entry.name, size: 0 };
+      render();
+      $('transcript-block').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+    function fmtHistoryDate(ts) {
+      const d = new Date(ts);
+      const now = new Date();
+      const sameDay = d.toDateString() === now.toDateString();
+      const time = d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      return sameDay ? `Today ${time}` : d.toLocaleDateString([], { month: 'short', day: 'numeric' }) + ` ${time}`;
+    }
+    function renderHistory() {
+      const list = loadHistory();
+      const sec = $('history-section');
+      sec.classList.toggle('hidden', list.length === 0);
+      const container = $('history-list');
+      container.innerHTML = '';
+      for (const e of list) {
+        const item = document.createElement('div');
+        item.className = 'history-item';
+        const main = document.createElement('div');
+        main.className = 'history-item-main';
+        main.innerHTML = `<div class="history-item-name"></div><div class="history-item-meta"><span class="history-badge">${e.provider === 'assemblyai' ? 'Multi-speaker' : 'Single'}</span> · ${fmtHistoryDate(e.date)}</div>`;
+        main.querySelector('.history-item-name').textContent = e.name;
+        main.addEventListener('click', () => restoreHistory(e.id));
+        const del = document.createElement('button');
+        del.className = 'history-item-del';
+        del.textContent = 'Delete';
+        del.addEventListener('click', (ev) => { ev.stopPropagation(); deleteHistory(e.id); });
+        item.appendChild(main);
+        item.appendChild(del);
+        container.appendChild(item);
+      }
+    }
+    $('history-clear').addEventListener('click', () => {
+      if (confirm('Clear all saved transcripts? This cannot be undone.')) {
+        try { localStorage.removeItem(HISTORY_STORAGE); } catch {}
+        renderHistory();
+      }
+    });
 
     // ============================================================================
     // Pairing: poll for the user's server to phone home
@@ -3701,6 +3833,7 @@
     } catch {}
 
     renderServerBadge();
+    renderHistory();
     render();
   })();
   </script>
