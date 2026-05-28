@@ -1322,8 +1322,8 @@
     .ai-block-head .mono-sm { color: var(--cta); }
     .ai-copy { background: transparent; border: 1px solid var(--border); border-radius: 4px; color: var(--fg-muted); font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; padding: 0.25rem 0.5rem; cursor: pointer; transition: color 0.15s, border-color 0.15s; }
     .ai-copy:hover { color: var(--fg); border-color: var(--accent); }
-    .ai-block-text { font-family: var(--font-serif); font-size: 1.02rem; line-height: 1.7; color: var(--fg); white-space: pre-wrap; }
-    .ai-block-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; }
+    .ai-block-text { font-family: var(--font-serif); font-size: 1.02rem; line-height: 1.7; color: var(--fg); white-space: pre-wrap; max-height: 16rem; overflow-y: auto; }
+    .ai-block-list { list-style: none; display: flex; flex-direction: column; gap: 0.5rem; max-height: 16rem; overflow-y: auto; }
     .ai-block-list li { font-family: var(--font-sans); font-size: 14px; line-height: 1.5; color: var(--fg); padding-left: 1.4rem; position: relative; }
     .ai-block-list li::before { content: '→'; position: absolute; left: 0; color: var(--cta); }
     .tx-body { padding: 2rem 1.5rem; max-height: 60vh; overflow-y: auto; background: var(--bg-alt); }
@@ -2210,7 +2210,7 @@
   <div id="edit-floating-bar" class="edit-floating-bar hidden">
     <span class="edit-floating-text">Editing transcript</span>
     <button id="edit-discard-floating" class="btn edit-floating-discard" type="button">Discard</button>
-    <button id="edit-done-floating" class="btn primary edit-floating-done" type="button">Done</button>
+    <button id="edit-done-floating" class="btn primary edit-floating-done" type="button">Save</button>
   </div>
 
   <!-- ===== Advanced setup modal ===== -->
@@ -2445,6 +2445,7 @@
       segments: null,        // [{start,end,text}] Whisper timestamps
       showConfidence: false, // toggle: highlight low-confidence words
       editing: false,        // in-place transcript editing mode
+      aiResults: null,       // {summary, actionItems[], translation, translationLanguage}
       file: null,
       serverUrl: '',  // empty = same origin (shared)
       pairing: { code: '', polling: false, pollHandle: null },
@@ -2700,6 +2701,7 @@
       }
       state.error = ''; state.transcript = ''; state.utterances = null; state.segments = null; state.speakerNames = {};
       // Reset AI extras results panel
+      state.aiResults = null;
       ['ai-results','ai-summary-block','ai-actions-block','ai-translation-block','ai-results-status'].forEach(id => $(id) && $(id).classList.add('hidden'));
       state.uploadProgress = 0; state.serverProgress = 0;
       state.message = 'Uploading'; state.stage = 'uploading';
@@ -3019,7 +3021,12 @@
 
       const commit = () => {
         const v = input.value.trim();
-        if (v) state.speakerNames[rawId] = v;
+        const oldLabel = state.speakerNames[rawId] || ('Speaker ' + rawId);
+        if (v && v !== oldLabel) {
+          state.speakerNames[rawId] = v;
+          // Propagate the rename into any generated AI results (no AI re-call)
+          renameSpeakerInAiResults(oldLabel, v);
+        }
         // Re-render all turns (cheap; updates every instance of this speaker)
         renderTurns();
       };
@@ -3323,30 +3330,55 @@
         $('ai-status-fill').style.width = '100%';
         setTimeout(() => $('ai-results-status').classList.add('hidden'), 350);
 
-        // Summary
-        if (data.summary != null) {
-          $('ai-summary-block').classList.remove('hidden');
-          $('ai-summary-text').textContent = data.summary;
-        }
-        // Action items
-        if (Array.isArray(data.actionItems)) {
-          $('ai-actions-block').classList.remove('hidden');
-          const ul = $('ai-actions-list'); ul.innerHTML = '';
-          if (data.actionItems.length === 0) {
-            const li = document.createElement('li'); li.textContent = 'No action items identified.'; ul.appendChild(li);
-          } else {
-            data.actionItems.forEach(a => { const li = document.createElement('li'); li.textContent = a; ul.appendChild(li); });
-          }
-        }
-        // Translation
-        if (data.translation != null) {
-          $('ai-translation-block').classList.remove('hidden');
-          $('ai-translation-label').textContent = 'Translation' + (data.translationLanguage ? ` (${data.translationLanguage})` : '');
-          $('ai-translation-text').textContent = data.translation;
-        }
+        // Store results in state so speaker renames can update them later
+        state.aiResults = {
+          summary: data.summary != null ? data.summary : null,
+          actionItems: Array.isArray(data.actionItems) ? data.actionItems : null,
+          translation: data.translation != null ? data.translation : null,
+          translationLanguage: data.translationLanguage || '',
+        };
+        renderAiResults();
       } catch (e) {
         aiStatus(e.message || 'Post-processing failed.', true);
       }
+    }
+
+    // Render the stored AI results into their blocks. Called after generation
+    // and again whenever a speaker is renamed (so names stay in sync).
+    function renderAiResults() {
+      const r = state.aiResults;
+      if (!r) return;
+      if (r.summary != null) {
+        $('ai-summary-block').classList.remove('hidden');
+        $('ai-summary-text').textContent = r.summary;
+      }
+      if (Array.isArray(r.actionItems)) {
+        $('ai-actions-block').classList.remove('hidden');
+        const ul = $('ai-actions-list'); ul.innerHTML = '';
+        if (r.actionItems.length === 0) {
+          const li = document.createElement('li'); li.textContent = 'No action items identified.'; ul.appendChild(li);
+        } else {
+          r.actionItems.forEach(a => { const li = document.createElement('li'); li.textContent = a; ul.appendChild(li); });
+        }
+      }
+      if (r.translation != null) {
+        $('ai-translation-block').classList.remove('hidden');
+        $('ai-translation-label').textContent = 'Translation' + (r.translationLanguage ? ` (${r.translationLanguage})` : '');
+        $('ai-translation-text').textContent = r.translation;
+      }
+    }
+
+    // Replace every whole-word occurrence of a speaker label in the AI results
+    // (summary / action items / translation) — used when a speaker is renamed
+    // so the change propagates without re-calling the model.
+    function renameSpeakerInAiResults(oldLabel, newLabel) {
+      const r = state.aiResults;
+      if (!r || !oldLabel || oldLabel === newLabel) return;
+      const rx = new RegExp(oldLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g');
+      if (typeof r.summary === 'string') r.summary = r.summary.replace(rx, newLabel);
+      if (Array.isArray(r.actionItems)) r.actionItems = r.actionItems.map(a => a.replace(rx, newLabel));
+      if (typeof r.translation === 'string') r.translation = r.translation.replace(rx, newLabel);
+      renderAiResults();
     }
 
     // Copy buttons for AI result blocks
@@ -4300,7 +4332,7 @@
     function setEditing(on, save) {
       state.editing = on;
       const diarized = Array.isArray(state.utterances) && state.utterances.length > 0;
-      $('edit-btn').textContent = on ? 'Done' : 'Edit';
+      $('edit-btn').textContent = on ? 'Save' : 'Edit';
       $('edit-btn').classList.toggle('active', on);
       $('edit-floating-bar').classList.toggle('hidden', !on);
       $('tx-body-hint') && $('tx-body-hint').remove();
