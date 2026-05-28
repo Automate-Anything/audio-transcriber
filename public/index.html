@@ -2088,7 +2088,7 @@
         // ETA depends on elapsed time, so re-render the status block so the
         // "~ N seconds remaining" updates continuously between server polls
         // (which happen every ~2s). Render is cheap when nothing else changed.
-        if (['uploading','server-stage'].includes(state.stage)) render();
+        if (!['idle','done','error',''].includes(state.stage)) render();
       }, 250);
     }
     function stopTimer() { if (timerHandle) clearInterval(timerHandle); timerHandle = null; }
@@ -2276,7 +2276,7 @@
         if (state.duration != null) parts.push('· ' + fmtTime(state.duration) + ' of audio');
         $('file-meta').textContent = parts.join(' ');
 
-        const busy = ['uploading','server-stage'].includes(state.stage);
+        const busy = !['idle','done','error',''].includes(state.stage);
         const haveKey = !!activeKey();
         $('run-btn').disabled = busy || !haveKey;
         $('change-btn').disabled = busy;
@@ -2291,7 +2291,7 @@
       if (showStatus) {
         const dot = $('status-dot');
         dot.className = 'dot';
-        if (['uploading','server-stage'].includes(state.stage)) dot.classList.add('active');
+        if (!['idle','done','error',''].includes(state.stage)) dot.classList.add('active');
         else if (state.stage === 'done') dot.classList.add('done');
         else if (state.stage === 'error') dot.classList.add('error');
 
@@ -2299,20 +2299,22 @@
         if (state.stage === 'uploading') label = `Uploading · ${Math.round(state.uploadProgress * 100)}%`;
         $('status-label').textContent = label;
 
-        const showBar = ['uploading','server-stage'].includes(state.stage);
+        const isWorking = !['idle','done','error',''].includes(state.stage);
+        const showBar = isWorking;
         $('progress-wrap').classList.toggle('hidden', !showBar);
         $('progress-meta').classList.toggle('hidden', !showBar);
 
         // Unified progress: upload occupies 0-15% of the bar, server-side
-        // processing occupies 15-100%. This way the bar fills continuously
-        // instead of resetting when the upload completes.
+        // processing occupies 15-100%. Server sends specific stage names
+        // like 'analyzing'/'submitting'/'transcribing' once work begins —
+        // anything that isn't 'uploading' maps to the server portion.
         // Normalize serverProgress: most paths set it as 0-1 fraction; if a
         // stale 0-100 value sneaks in (older server), divide.
         let sp = state.serverProgress;
         if (sp > 1) sp = sp / 100;
         let pct = 0;
         if (state.stage === 'uploading') pct = state.uploadProgress * 15;
-        else if (state.stage === 'server-stage') pct = 15 + sp * 85;
+        else if (isWorking) pct = 15 + sp * 85;
         pct = Math.max(0, Math.min(100, pct));
         $('progress-fill').style.width = pct + '%';
         $('progress-pct').textContent = Math.round(pct) + '%';
