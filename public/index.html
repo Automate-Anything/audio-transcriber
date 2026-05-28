@@ -564,6 +564,16 @@
     .key-steps li::marker { color: var(--fg-muted); font-variant-numeric: tabular-nums; }
     .key-steps li:last-child { margin-bottom: 0; }
     .key-steps li strong { color: var(--fg); font-weight: 600; }
+    .key-steps-note {
+      margin-top: 0.75rem;
+      padding-top: 0.65rem;
+      border-top: 1px solid var(--border);
+      font-family: var(--font-sans);
+      font-size: 12.5px;
+      line-height: 1.55;
+      color: #cbd5e1;
+    }
+    .key-steps-note strong { color: var(--fg); font-weight: 600; }
 
     .key-input-wrap { display: flex; align-items: stretch; border: 1px solid var(--border-strong); width: 100%; background: var(--bg-input); }
     .key-input { flex: 1; min-width: 0; padding: 0.7rem 0.9rem; border: none; background: transparent; font-family: var(--font-mono); font-size: 13px; color: var(--fg); outline: none; }
@@ -1090,7 +1100,7 @@
         <div class="key-panel">
           <div class="key-header">
             <div class="key-label mono-sm">AssemblyAI API Key</div>
-            <a class="get-key-btn" href="https://www.assemblyai.com/app/api-keys" target="_blank" rel="noopener noreferrer">
+            <a class="get-key-btn" href="https://www.assemblyai.com/dashboard/signup" target="_blank" rel="noopener noreferrer">
               Get API Key <span class="ext-icon" aria-hidden="true">↗</span>
             </a>
           </div>
@@ -1106,11 +1116,14 @@
             <div class="key-steps">
               <div class="key-steps-title">Don't have one yet?</div>
               <ol>
-                <li>Tap <strong>Get API Key</strong> above &mdash; opens AssemblyAI in a new tab</li>
-                <li>Sign in or create an AssemblyAI account (~$50 free credit included)</li>
-                <li>Copy the key from your dashboard</li>
-                <li>Paste it here</li>
+                <li>Tap <strong>Get API Key</strong> above &mdash; opens AssemblyAI's signup in a new tab</li>
+                <li>Sign up with email or Google &mdash; <strong>no credit card required</strong></li>
+                <li>After signup you land on your dashboard. Your <strong>API key</strong> is shown right at the top &mdash; tap to copy it</li>
+                <li>Paste it here and hit <strong>Save Key</strong></li>
               </ol>
+              <div class="key-steps-note">
+                Free tier includes <strong>$50 in credits</strong> &mdash; roughly 150+ hours of multi-speaker transcription. After that, AssemblyAI bills you directly (pay-as-you-go, no monthly fee).
+              </div>
             </div>
           </div>
           <div id="aai-key-saved-mode" class="hidden">
