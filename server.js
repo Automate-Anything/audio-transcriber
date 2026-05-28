@@ -348,6 +348,13 @@ async function processAssemblyJob(job) {
     },
     body: JSON.stringify({
       audio_url: upload_url,
+      // AssemblyAI now requires speech_models to be set explicitly (the
+      // previous default was removed). This pattern follows their docs
+      // recommendation: try Universal-3 Pro (best accuracy, supports
+      // English/Spanish/French/German/Italian/Portuguese natively); fall
+      // back to Universal-2 for any other language. Pricing is $0.21/hr
+      // for U3 Pro and $0.15/hr for U2, plus $0.02/hr for diarization.
+      speech_models: ['universal-3-pro', 'universal-2'],
       speaker_labels: true,
       // Punctuation and formatting are on by default; explicit for clarity.
       punctuate: true,
