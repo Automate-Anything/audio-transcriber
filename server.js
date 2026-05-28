@@ -478,11 +478,18 @@ async function processJob(job) {
     job.stage = 'analyzing';
     job.message = 'Reading audio metadata';
     job.duration = await ffprobeDuration(job.inputPath);
+    // duration is null if even the decode-fallback couldn't determine it.
+    // Don't fail outright — fall back to heuristics based on size + format.
 
     const ext = path.extname(job.originalName).toLowerCase();
     const isCompressed = COMPRESSED_EXTS.includes(ext);
     const isSmall      = job.fileSize <= DIRECT_TO_WHISPER_MAX_BYTES;
-    const isShort      = job.duration <= MAX_CHUNK;
+    // If duration is unknown but the file is compressed and small enough,
+    // assume it's short enough to send direct. Whisper has its own
+    // size+length limits and will reject if we're wrong.
+    const isShort      = job.duration == null
+                         ? (isCompressed && isSmall)
+                         : (job.duration <= MAX_CHUNK);
 
     if (isCompressed && isSmall && isShort) {
       // PATH A: send directly to Whisper, no ffmpeg at all
@@ -558,7 +565,9 @@ async function processJob(job) {
 // ============================================================================
 
 function ffprobeDuration(filePath) {
-  return new Promise((resolve, reject) => {
+  // Fast path: read the container's format-level duration. Works for any
+  // file properly muxed with a duration header (most uploads).
+  return new Promise((resolve) => {
     const proc = spawn('ffprobe', [
       '-v', 'error',
       '-show_entries', 'format=duration',
@@ -569,18 +578,41 @@ function ffprobeDuration(filePath) {
     proc.stdout.on('data', d => { out += d.toString(); });
     proc.stderr.on('data', d => { err += d.toString(); });
     proc.on('close', code => {
-      if (code !== 0) {
-        console.error(`[ffprobe] exit ${code}: ${err.slice(0, 500)}`);
-        return reject(new Error('Could not read audio metadata. File may be corrupted.'));
+      if (code === 0) {
+        const dur = parseFloat(out.trim());
+        if (isFinite(dur) && dur > 0) return resolve(dur);
       }
-      const dur = parseFloat(out.trim());
-      if (!isFinite(dur) || dur <= 0) return reject(new Error('Could not determine audio duration.'));
-      resolve(dur);
+      if (err) console.error(`[ffprobe] no header duration: ${err.slice(0, 300)}`);
+      // Fall through to decode-based probe (handles browser-recorded webm
+      // and other live-streamed containers that lack a duration header).
+      ffmpegDecodeDuration(filePath).then(resolve).catch(() => resolve(null));
     });
     proc.on('error', e => {
       console.error(`[ffprobe] spawn error: ${e.message}`);
-      reject(new Error('Audio processing tool is unavailable on this server.'));
+      resolve(null);
     });
+  });
+}
+
+// Decode-based duration probe: ffmpeg -f null - runs the file through the
+// decoder and prints the running time. Reliable but slower (proportional
+// to the audio length — typically a few hundred ms for a short recording).
+// Used as fallback when the container has no duration header (common for
+// MediaRecorder webm output).
+function ffmpegDecodeDuration(filePath) {
+  return new Promise((resolve) => {
+    const proc = spawn('ffmpeg', ['-i', filePath, '-f', 'null', '-']);
+    let err = '';
+    proc.stderr.on('data', d => { err += d.toString(); });
+    proc.on('close', () => {
+      // ffmpeg emits 'time=HH:MM:SS.ms' lines; the final one is the true length
+      const matches = [...err.matchAll(/time=(\d{2}):(\d{2}):(\d{2}\.\d+)/g)];
+      if (matches.length === 0) return resolve(null);
+      const last = matches[matches.length - 1];
+      const dur = (parseInt(last[1]) * 3600) + (parseInt(last[2]) * 60) + parseFloat(last[3]);
+      resolve(dur > 0 ? dur : null);
+    });
+    proc.on('error', () => resolve(null));
   });
 }
 
@@ -778,7 +810,7 @@ async function transcribeFile(filePath, apiKey) {
 // ============================================================================
 
 function formatTime(s) {
-  if (!isFinite(s)) return '';
+  if (s == null || !isFinite(s)) return 'audio';
   const h = Math.floor(s / 3600);
   const m = Math.floor((s % 3600) / 60);
   const sec = Math.floor(s % 60);
