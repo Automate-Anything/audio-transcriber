@@ -516,22 +516,23 @@
     }
     .key-label { display: block; margin: 0; }
     .get-key-btn {
-      display: inline-flex; align-items: center; gap: 0.4rem;
-      padding: 0.45rem 0.85rem;
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 0.45rem 0.7rem;
       background: rgba(0, 108, 190, 0.12);
       border: 1px solid var(--cta);
       color: var(--cta);
       font-family: var(--font-mono);
-      font-size: 10.5px;
+      font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: 0.15em;
+      letter-spacing: 0.13em;
       text-decoration: none;
       border-radius: 4px;
       transition: background 0.15s, color 0.15s;
       white-space: nowrap;
+      flex-shrink: 0;
     }
     .get-key-btn:hover { background: var(--cta); color: var(--fg); }
-    .get-key-btn .ext-icon { font-size: 12px; line-height: 1; }
+    .get-key-btn .ext-icon { font-size: 11px; line-height: 1; }
 
     .key-steps {
       margin-top: 0.85rem;
@@ -547,9 +548,11 @@
       padding: 0.7rem 1rem;
       user-select: none;
       transition: background 0.15s;
+      gap: 0.5rem;
     }
     .key-steps-summary::-webkit-details-marker { display: none; }
-    .key-steps-summary:hover { background: rgba(0, 108, 190, 0.08); }
+    .key-steps-summary:hover { background: rgba(0, 108, 190, 0.1); }
+    .key-steps-summary:hover .key-steps-toggle-text { color: var(--fg); }
     .key-steps-title {
       font-family: var(--font-mono);
       font-size: 10.5px;
@@ -557,13 +560,32 @@
       letter-spacing: 0.2em;
       color: #cbd5e1;
     }
-    .key-steps-chev {
-      font-size: 11px;
+    .key-steps-toggle {
+      display: inline-flex; align-items: center;
+      gap: 0.35rem;
       color: var(--cta);
+      flex-shrink: 0;
+    }
+    .key-steps-toggle-text {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+      transition: color 0.15s;
+    }
+    .key-steps-chev {
       transition: transform 0.25s;
-      line-height: 1;
+      display: block;
     }
     .key-steps[open] .key-steps-chev { transform: rotate(180deg); }
+    .key-steps[open] .key-steps-toggle-text::before { content: 'Hide'; }
+    .key-steps[open] .key-steps-toggle-text { font-size: 0; letter-spacing: 0; }
+    .key-steps[open] .key-steps-toggle-text::before {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.18em;
+    }
     .key-steps-body {
       padding: 0 1rem 0.85rem;
       border-top: 1px solid var(--border);
@@ -1328,7 +1350,7 @@
           <div class="key-header">
             <div class="key-label mono-sm">OpenAI API Key</div>
             <a class="get-key-btn" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">
-              Get API Key <span class="ext-icon" aria-hidden="true">↗</span>
+              Get Key <span class="ext-icon" aria-hidden="true">↗</span>
             </a>
           </div>
           <div id="key-edit-mode">
@@ -1343,11 +1365,14 @@
             <details class="key-steps">
               <summary class="key-steps-summary">
                 <span class="key-steps-title">Don't have a key yet?</span>
-                <span class="key-steps-chev" aria-hidden="true">▾</span>
+                <span class="key-steps-toggle">
+                  <span class="key-steps-toggle-text">Show</span>
+                  <svg class="key-steps-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                </span>
               </summary>
               <div class="key-steps-body">
                 <ol>
-                  <li>Tap <strong>Get API Key</strong> above &mdash; opens OpenAI in a new tab</li>
+                  <li>Tap <strong>Get Key</strong> above &mdash; opens OpenAI in a new tab</li>
                   <li>Sign in or create an OpenAI account</li>
                   <li>Click <strong>Create new secret key</strong></li>
                   <li>Copy the key (it's only shown once) and paste it here</li>
@@ -1374,7 +1399,7 @@
           <div class="key-header">
             <div class="key-label mono-sm">AssemblyAI API Key</div>
             <a class="get-key-btn" href="https://www.assemblyai.com/dashboard/signup" target="_blank" rel="noopener noreferrer">
-              Get API Key <span class="ext-icon" aria-hidden="true">↗</span>
+              Get Key <span class="ext-icon" aria-hidden="true">↗</span>
             </a>
           </div>
           <div id="aai-key-edit-mode">
@@ -1389,11 +1414,14 @@
             <details class="key-steps">
               <summary class="key-steps-summary">
                 <span class="key-steps-title">Don't have a key yet?</span>
-                <span class="key-steps-chev" aria-hidden="true">▾</span>
+                <span class="key-steps-toggle">
+                  <span class="key-steps-toggle-text">Show</span>
+                  <svg class="key-steps-chev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
+                </span>
               </summary>
               <div class="key-steps-body">
                 <ol>
-                  <li>Tap <strong>Get API Key</strong> above &mdash; opens AssemblyAI's signup in a new tab</li>
+                  <li>Tap <strong>Get Key</strong> above &mdash; opens AssemblyAI's signup in a new tab</li>
                   <li>Sign up with email or Google &mdash; <strong>no credit card required</strong></li>
                   <li>After signup you land on your dashboard. Your <strong>API key</strong> is shown right at the top &mdash; tap to copy it</li>
                   <li>Paste it here and hit <strong>Save Key</strong></li>
