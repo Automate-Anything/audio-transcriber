@@ -535,25 +535,45 @@
 
     .key-steps {
       margin-top: 0.85rem;
-      padding: 0.85rem 1rem;
       background: rgba(0, 108, 190, 0.05);
       border: 1px solid var(--border);
       border-left: 2px solid var(--cta);
       border-radius: 4px;
     }
+    .key-steps-summary {
+      list-style: none;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.7rem 1rem;
+      user-select: none;
+      transition: background 0.15s;
+    }
+    .key-steps-summary::-webkit-details-marker { display: none; }
+    .key-steps-summary:hover { background: rgba(0, 108, 190, 0.08); }
     .key-steps-title {
       font-family: var(--font-mono);
-      font-size: 10px;
+      font-size: 10.5px;
       text-transform: uppercase;
       letter-spacing: 0.2em;
       color: #cbd5e1;
-      margin-bottom: 0.6rem;
     }
-    .key-steps ol {
+    .key-steps-chev {
+      font-size: 11px;
+      color: var(--cta);
+      transition: transform 0.25s;
+      line-height: 1;
+    }
+    .key-steps[open] .key-steps-chev { transform: rotate(180deg); }
+    .key-steps-body {
+      padding: 0 1rem 0.85rem;
+      border-top: 1px solid var(--border);
+      padding-top: 0.85rem;
+    }
+    .key-steps-body ol {
       margin: 0; padding-left: 1.4rem;
       list-style-position: outside;
     }
-    .key-steps li {
+    .key-steps-body li {
       font-family: var(--font-sans);
       font-size: 14px;
       line-height: 1.6;
@@ -561,9 +581,9 @@
       padding-left: 0.25rem;
       margin-bottom: 0.35rem;
     }
-    .key-steps li::marker { color: var(--fg-muted); font-variant-numeric: tabular-nums; }
-    .key-steps li:last-child { margin-bottom: 0; }
-    .key-steps li strong { color: var(--fg); font-weight: 600; }
+    .key-steps-body li::marker { color: var(--fg-muted); font-variant-numeric: tabular-nums; }
+    .key-steps-body li:last-child { margin-bottom: 0; }
+    .key-steps-body li strong { color: var(--fg); font-weight: 600; }
     .key-steps-note {
       margin-top: 0.75rem;
       padding-top: 0.65rem;
@@ -1320,15 +1340,20 @@
               <button id="save-key" class="btn primary">Save Key</button>
               <div id="key-error" class="err-inline hidden"></div>
             </div>
-            <div class="key-steps">
-              <div class="key-steps-title">Don't have one yet?</div>
-              <ol>
-                <li>Tap <strong>Get API Key</strong> above &mdash; opens OpenAI in a new tab</li>
-                <li>Sign in or create an OpenAI account</li>
-                <li>Click <strong>Create new secret key</strong></li>
-                <li>Copy the key (it's only shown once) and paste it here</li>
-              </ol>
-            </div>
+            <details class="key-steps">
+              <summary class="key-steps-summary">
+                <span class="key-steps-title">Don't have a key yet?</span>
+                <span class="key-steps-chev" aria-hidden="true">▾</span>
+              </summary>
+              <div class="key-steps-body">
+                <ol>
+                  <li>Tap <strong>Get API Key</strong> above &mdash; opens OpenAI in a new tab</li>
+                  <li>Sign in or create an OpenAI account</li>
+                  <li>Click <strong>Create new secret key</strong></li>
+                  <li>Copy the key (it's only shown once) and paste it here</li>
+                </ol>
+              </div>
+            </details>
           </div>
           <div id="key-saved-mode" class="hidden">
             <div class="key-saved-line">
@@ -1361,18 +1386,23 @@
               <button id="aai-save-key" class="btn primary">Save Key</button>
               <div id="aai-key-error" class="err-inline hidden"></div>
             </div>
-            <div class="key-steps">
-              <div class="key-steps-title">Don't have one yet?</div>
-              <ol>
-                <li>Tap <strong>Get API Key</strong> above &mdash; opens AssemblyAI's signup in a new tab</li>
-                <li>Sign up with email or Google &mdash; <strong>no credit card required</strong></li>
-                <li>After signup you land on your dashboard. Your <strong>API key</strong> is shown right at the top &mdash; tap to copy it</li>
-                <li>Paste it here and hit <strong>Save Key</strong></li>
-              </ol>
-              <div class="key-steps-note">
-                Free tier includes <strong>$50 in credits</strong> &mdash; roughly 150+ hours of multi-speaker transcription. After that, AssemblyAI bills you directly (pay-as-you-go, no monthly fee).
+            <details class="key-steps">
+              <summary class="key-steps-summary">
+                <span class="key-steps-title">Don't have a key yet?</span>
+                <span class="key-steps-chev" aria-hidden="true">▾</span>
+              </summary>
+              <div class="key-steps-body">
+                <ol>
+                  <li>Tap <strong>Get API Key</strong> above &mdash; opens AssemblyAI's signup in a new tab</li>
+                  <li>Sign up with email or Google &mdash; <strong>no credit card required</strong></li>
+                  <li>After signup you land on your dashboard. Your <strong>API key</strong> is shown right at the top &mdash; tap to copy it</li>
+                  <li>Paste it here and hit <strong>Save Key</strong></li>
+                </ol>
+                <div class="key-steps-note">
+                  Free tier includes <strong>$50 in credits</strong> &mdash; roughly 150+ hours of multi-speaker transcription. After that, AssemblyAI bills you directly (pay-as-you-go, no monthly fee).
+                </div>
               </div>
-            </div>
+            </details>
           </div>
           <div id="aai-key-saved-mode" class="hidden">
             <div class="key-saved-line">
