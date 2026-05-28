@@ -2275,6 +2275,7 @@
     const KEYTERMS_STORAGE = 'keyterms';
     const HISTORY_STORAGE = 'transcript_history';
     const THEME_STORAGE = 'theme';
+    const ACTIVE_JOB_STORAGE = 'active_job';
     const HISTORY_MAX = 10;
     const SERVER_URL_STORAGE = 'custom_server_url';
     const PAIRING_STORAGE = 'pairing_in_progress';
@@ -2510,6 +2511,44 @@
       }
     }
 
+    function saveActiveJob(jobId) {
+      try { localStorage.setItem(ACTIVE_JOB_STORAGE, JSON.stringify({
+        jobId, serverUrl: state.serverUrl || '', fileName: state.file?.name || 'Recording', at: Date.now(),
+      })); } catch {}
+    }
+    function clearActiveJob() {
+      try { localStorage.removeItem(ACTIVE_JOB_STORAGE); } catch {}
+    }
+
+    // Poll a job to completion and finalize the UI. Shared by a fresh run()
+    // and by recovery after a page reload.
+    async function pollAndFinalize(jobId) {
+      const final = await pollJob(jobId, (job) => {
+        state.stage = job.stage || 'server-stage';
+        state.message = job.message || '';
+        state.serverProgress = job.progress || 0;
+        state.chunkInfo = job.chunkInfo || state.chunkInfo;
+        state.duration = job.duration;
+        state.pathTaken = job.pathTaken || '';
+        if (job.transcript) state.transcript = job.transcript;
+        if (job.utterances) state.utterances = job.utterances;
+        if (job.segments) state.segments = job.segments;
+        if (job.error) state.error = job.error;
+        render();
+      });
+
+      if (final.status === 'error') throw new Error(final.error || 'Server reported an error.');
+
+      state.stage = 'done';
+      state.message = 'Complete';
+      state.transcript = final.transcript || state.transcript;
+      state.utterances = final.utterances || state.utterances;
+      state.segments = final.segments || state.segments;
+      render();
+      addToHistory();
+      runPostProcessing();
+    }
+
     async function run() {
       if (!state.file) return;
       const key = activeKey();
@@ -2533,38 +2572,57 @@
           state.uploadProgress = p; render();
         });
         state.jobId = jobId;
+        saveActiveJob(jobId);
         state.message = 'Queued on server';
         state.stage = 'server-stage';
         render();
 
-        const final = await pollJob(jobId, (job) => {
-          state.stage = job.stage || 'server-stage';
-          state.message = job.message || '';
-          state.serverProgress = job.progress || 0;
-          state.chunkInfo = job.chunkInfo || state.chunkInfo;
-          state.duration = job.duration;
-          state.pathTaken = job.pathTaken || '';
-          if (job.transcript) state.transcript = job.transcript;
-          if (job.utterances) state.utterances = job.utterances;
-          if (job.segments) state.segments = job.segments;
-          if (job.error) state.error = job.error;
-          render();
-        });
-
-        if (final.status === 'error') throw new Error(final.error || 'Server reported an error.');
-
-        state.stage = 'done';
-        state.message = 'Complete';
-        state.transcript = final.transcript || state.transcript;
-        state.utterances = final.utterances || state.utterances;
-        state.segments = final.segments || state.segments;
-        render();
-        addToHistory();
-        // Fire optional AI extras if the user checked any boxes
-        runPostProcessing();
+        await pollAndFinalize(jobId);
+        clearActiveJob();
       } catch (e) {
         state.error = e.message || 'Something went wrong.';
         state.stage = 'error'; render();
+        clearActiveJob();
+      } finally { stopTimer(); }
+    }
+
+    // Attempt to resume an in-flight job after a page reload. Best-effort:
+    // if the server no longer knows the job (restart / 404), we quietly
+    // clear it. We can't recover the original audio, so synced playback
+    // won't be available, but the transcript will appear.
+    async function recoverActiveJob() {
+      let saved;
+      try { saved = JSON.parse(localStorage.getItem(ACTIVE_JOB_STORAGE) || 'null'); } catch { saved = null; }
+      if (!saved || !saved.jobId) return;
+      // Stale guard: don't try to recover jobs older than 1 hour
+      if (Date.now() - (saved.at || 0) > 60 * 60 * 1000) { clearActiveJob(); return; }
+      if (saved.serverUrl) state.serverUrl = saved.serverUrl;
+      // Probe once before committing the UI to a recovering state
+      try {
+        const res = await fetch(`${apiBase()}/api/jobs/${saved.jobId}`);
+        if (!res.ok) { clearActiveJob(); return; }
+        const job = await res.json();
+        state.file = { name: saved.fileName || job.originalName || 'Recording', size: job.fileSize || 0 };
+        state.jobId = saved.jobId;
+        state.stage = job.stage || 'server-stage';
+        state.message = job.message || 'Resuming…';
+        startTimer(); render();
+        if (job.status === 'done' || job.status === 'error') {
+          // Already finished while we were away — finalize directly
+          if (job.status === 'error') { state.error = job.error || 'Server reported an error.'; state.stage = 'error'; render(); }
+          else {
+            state.transcript = job.transcript || '';
+            state.utterances = job.utterances || null;
+            state.segments = job.segments || null;
+            state.stage = 'done'; state.message = 'Complete'; render(); addToHistory();
+          }
+          stopTimer(); clearActiveJob(); return;
+        }
+        // Still running — resume polling
+        await pollAndFinalize(saved.jobId);
+        clearActiveJob();
+      } catch {
+        clearActiveJob();
       } finally { stopTimer(); }
     }
 
@@ -4251,6 +4309,8 @@
       applyTheme(savedTheme === 'light' ? 'light' : 'dark');
     } catch { applyTheme('dark'); }
     render();
+    // Best-effort: resume an in-flight transcription if the page was reloaded
+    recoverActiveJob();
   })();
   </script>
 </body>
