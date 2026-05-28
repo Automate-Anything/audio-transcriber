@@ -239,13 +239,20 @@ app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
   // Capped in length and item count to keep requests sane.
   const keyterms = (req.body.keyterms || '').toString().trim().slice(0, 800);
 
+  // Code-switching: caller declares the audio mixes languages. We then rely on
+  // language detection (never a pinned language) plus a code-switching prompt.
+  const codeSwitching = req.body.codeSwitching === '1' || req.body.codeSwitching === 'true';
+  // Optional named languages present (hints woven into the prompt). Plain
+  // language NAMES, comma-separated, capped.
+  const csLanguages = (req.body.languages || '').toString().trim().slice(0, 200);
+
   if (provider === 'assemblyai') {
     // AssemblyAI keys are 32-char hex-ish strings, no required prefix
     if (apiKey.length < 20) {
       try { fs.unlinkSync(req.file.path); } catch {}
       return res.status(401).json({ error: "That key doesn't look right for AssemblyAI." });
     }
-    return startAssemblyJob(req, res, apiKey, language, keyterms);
+    return startAssemblyJob(req, res, apiKey, language, keyterms, codeSwitching, csLanguages);
   }
 
   // OpenAI Whisper path (existing behavior)
@@ -297,7 +304,7 @@ app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
 // Flow: upload bytes -> submit transcript with speaker_labels -> poll until done.
 // ============================================================================
 
-function startAssemblyJob(req, res, apiKey, language, keyterms) {
+function startAssemblyJob(req, res, apiKey, language, keyterms, codeSwitching, csLanguages) {
   const jobId = crypto.randomBytes(12).toString('hex');
   const job = {
     id: jobId,
@@ -318,6 +325,8 @@ function startAssemblyJob(req, res, apiKey, language, keyterms) {
     pathTaken: 'assemblyai',
     language: language || '',
     keyterms: keyterms || '',
+    codeSwitching: !!codeSwitching,
+    csLanguages: csLanguages || '',
     createdAt: Date.now(),
     apiKey,
     assemblyTranscriptId: null,
@@ -376,7 +385,24 @@ async function processAssemblyJob(job) {
     punctuate: true,
     format_text: true,
   };
-  if (job.language) {
+  if (job.codeSwitching) {
+    // Code-switching mode: rely on detection (never a pinned language) and
+    // tell Universal-3 Pro to preserve the spoken language mix. The exact
+    // prompt below is AssemblyAI's documented phrasing for enabling this.
+    submitBody.language_detection = true;
+    let prompt = 'The spoken language may change throughout the audio, transcribe in the original language mix (code-switching), preserving the words in the language they are spoken.';
+    // Weave in the named languages as a hint when provided.
+    const named = job.csLanguages
+      ? job.csLanguages.split(',').map(s => s.trim()).filter(Boolean)
+      : [];
+    if (named.length) {
+      prompt += ` The audio mixes the following languages: ${named.join(', ')}.`;
+    }
+    submitBody.prompt = prompt;
+    // Also enable code switching for the Universal-2 fallback path so
+    // non-U3Pro languages (e.g. Hebrew) still get multi-language routing.
+    submitBody.language_detection_options = { code_switching: true };
+  } else if (job.language) {
     // Explicit language: AssemblyAI routes to the right model and rejects
     // with a clear error if a feature isn't supported for that language
     // (better than silently dropping it).

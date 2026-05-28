@@ -539,6 +539,41 @@
     }
     /* Keyterms disclosure */
     .keyterms-details { margin-top: 0.9rem; border-top: 1px solid var(--border); padding-top: 0.5rem; }
+    /* Code-switching block */
+    .cs-block { margin-top: 0.9rem; border-top: 1px solid var(--border); padding-top: 0.9rem; }
+    .cs-toggle { display: flex; align-items: flex-start; gap: 0.6rem; cursor: pointer; user-select: none; }
+    .cs-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .cs-toggle-box {
+      width: 18px; height: 18px; flex-shrink: 0; margin-top: 0.1rem;
+      border: 2px solid var(--border-strong); border-radius: 5px;
+      position: relative; transition: background 0.15s, border-color 0.15s;
+    }
+    .cs-toggle:hover .cs-toggle-box { border-color: var(--cta); }
+    .cs-toggle input:checked + .cs-toggle-box { background: var(--cta); border-color: var(--cta); }
+    .cs-toggle input:checked + .cs-toggle-box::after {
+      content: ''; position: absolute; left: 4px; top: 0.5px;
+      width: 5px; height: 10px; border: solid #fff; border-width: 0 2.5px 2.5px 0;
+      transform: rotate(45deg);
+    }
+    .cs-toggle-label { font-family: var(--font-sans); font-size: 14px; color: var(--fg); line-height: 1.35; }
+    .cs-toggle-sub { display: block; font-size: 12px; color: var(--fg-muted); }
+    .cs-detail { margin-top: 0.85rem; padding-left: 1.6rem; }
+    .cs-langs-label { font-family: var(--font-sans); font-size: 13px; color: var(--fg-soft); margin-bottom: 0.5rem; }
+    .cs-langs { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+    .lang-chip {
+      display: inline-flex; align-items: center; cursor: pointer; user-select: none;
+      padding: 0.35rem 0.75rem; border-radius: 999px;
+      background: var(--bg-input); border: 1px solid var(--border-strong);
+      font-family: var(--font-sans); font-size: 13px; color: var(--fg-muted);
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .lang-chip:hover { border-color: var(--cta); color: var(--fg); }
+    .lang-chip input { position: absolute; opacity: 0; width: 0; height: 0; }
+    .lang-chip:has(input:checked) { background: var(--cta); border-color: var(--cta); color: #fff; }
+    .cs-note { font-family: var(--font-sans); font-size: 12px; color: var(--fg-muted); line-height: 1.5; margin-top: 0.7rem; }
+    .cs-note strong { color: var(--fg-soft); }
+    /* When code-switching is on, dim the single-language picker */
+    .lang-panel.cs-active .lang-select { opacity: 0.45; pointer-events: none; }
     .keyterms-summary {
       list-style: none; cursor: pointer;
       display: flex; align-items: center; justify-content: space-between;
@@ -1794,6 +1829,34 @@
             </select>
           </div>
         </div>
+
+        <!-- Multiple-language / code-switching mode -->
+        <div class="cs-block">
+          <label class="cs-toggle">
+            <input type="checkbox" id="cs-enable">
+            <span class="cs-toggle-box"></span>
+            <span class="cs-toggle-label">This recording has multiple languages
+              <span class="cs-toggle-sub">spoken back and forth (code-switching)</span>
+            </span>
+          </label>
+          <div id="cs-detail" class="cs-detail hidden">
+            <div class="cs-langs-label">Which languages? <span class="keyterms-optional">(optional — helps accuracy)</span></div>
+            <div id="cs-langs" class="cs-langs">
+              <label class="lang-chip"><input type="checkbox" value="English"><span>English</span></label>
+              <label class="lang-chip"><input type="checkbox" value="Hebrew"><span>Hebrew</span></label>
+              <label class="lang-chip"><input type="checkbox" value="Spanish"><span>Spanish</span></label>
+              <label class="lang-chip"><input type="checkbox" value="French"><span>French</span></label>
+              <label class="lang-chip"><input type="checkbox" value="German"><span>German</span></label>
+              <label class="lang-chip"><input type="checkbox" value="Italian"><span>Italian</span></label>
+              <label class="lang-chip"><input type="checkbox" value="Portuguese"><span>Portuguese</span></label>
+              <label class="lang-chip"><input type="checkbox" value="Arabic"><span>Arabic</span></label>
+              <label class="lang-chip"><input type="checkbox" value="Russian"><span>Russian</span></label>
+              <label class="lang-chip"><input type="checkbox" value="Chinese"><span>Chinese</span></label>
+            </div>
+            <div class="cs-note">Works best with <strong>Multiple speakers</strong>. English plus one other language gives the strongest results — other mixes (including Hebrew) are supported but worth testing on a short clip first.</div>
+          </div>
+        </div>
+
         <details class="keyterms-details">
           <summary class="keyterms-summary">
             <span class="keyterms-summary-text">Custom words &amp; names <span class="keyterms-optional">(optional)</span></span>
@@ -2411,6 +2474,7 @@
     const REC_TYPE_STORAGE = 'recording_type';
     const LANG_STORAGE = 'audio_language';
     const KEYTERMS_STORAGE = 'keyterms';
+    const CS_STORAGE = 'code_switching';
     const HISTORY_STORAGE = 'transcript_history';
     const THEME_STORAGE = 'theme';
     const MODEL_STORAGE = 'ai_model';
@@ -2442,6 +2506,8 @@
       recType: 'single',     // 'single' (OpenAI Whisper) | 'multi' (AssemblyAI)
       language: '',          // ISO 639-1 code, e.g. 'he', 'en'; empty = auto-detect
       keyterms: '',          // optional comma-separated vocabulary hints
+      codeSwitching: false,  // recording has multiple languages (code-switching)
+      csLanguages: [],       // optional named languages present (prompt hints)
       segments: null,        // [{start,end,text}] Whisper timestamps
       showConfidence: false, // toggle: highlight low-confidence words
       editing: false,        // in-place transcript editing mode
@@ -2630,8 +2696,14 @@
         const form = new FormData();
         form.append('file', file);
         form.append('provider', provider || 'openai');
-        if (language) form.append('language', language);
+        // In code-switching mode we rely on auto-detection, so don't pin a
+        // single language even if one is selected in the (dimmed) picker.
+        if (language && !state.codeSwitching) form.append('language', language);
         if (state.keyterms) form.append('keyterms', state.keyterms);
+        if (state.codeSwitching) {
+          form.append('codeSwitching', '1');
+          if (state.csLanguages.length) form.append('languages', state.csLanguages.join(','));
+        }
         xhr.open('POST', `${apiBase()}/api/transcribe`);
         xhr.setRequestHeader('Authorization', 'Bearer ' + apiKey);
         xhr.send(form);
@@ -3787,6 +3859,28 @@
     }
     $('keyterms-input').addEventListener('input', (e) => setKeyterms(e.target.value));
 
+    // Code-switching (multiple languages) toggle + language chips
+    function persistCodeSwitching() {
+      try {
+        localStorage.setItem(CS_STORAGE, JSON.stringify({
+          on: state.codeSwitching, langs: state.csLanguages,
+        }));
+      } catch {}
+    }
+    function applyCodeSwitchingUI() {
+      $('cs-detail').classList.toggle('hidden', !state.codeSwitching);
+      document.querySelector('.lang-panel').classList.toggle('cs-active', state.codeSwitching);
+    }
+    $('cs-enable').addEventListener('change', (e) => {
+      state.codeSwitching = e.target.checked;
+      applyCodeSwitchingUI();
+      persistCodeSwitching();
+    });
+    $('cs-langs').addEventListener('change', () => {
+      state.csLanguages = [...$('cs-langs').querySelectorAll('input:checked')].map(i => i.value);
+      persistCodeSwitching();
+    });
+
     // ============================================================================
     // File wiring
     // ============================================================================
@@ -4568,6 +4662,18 @@
         state.language = savedLang;
         const sel = $('lang-select');
         if ([...sel.options].some(o => o.value === savedLang)) sel.value = savedLang;
+      }
+    } catch {}
+    try {
+      const savedCs = JSON.parse(localStorage.getItem(CS_STORAGE) || 'null');
+      if (savedCs && typeof savedCs === 'object') {
+        state.codeSwitching = !!savedCs.on;
+        state.csLanguages = Array.isArray(savedCs.langs) ? savedCs.langs : [];
+        $('cs-enable').checked = state.codeSwitching;
+        $('cs-langs').querySelectorAll('input').forEach(i => {
+          i.checked = state.csLanguages.includes(i.value);
+        });
+        applyCodeSwitchingUI();
       }
     } catch {}
     try {
