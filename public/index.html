@@ -432,7 +432,61 @@
 
     /* API key panel */
     .key-panel { padding: 1rem 1.25rem; }
-    .key-label { display: block; margin-bottom: 0.6rem; }
+    .key-header {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 0.75rem; flex-wrap: wrap;
+      margin-bottom: 0.75rem;
+    }
+    .key-label { display: block; margin: 0; }
+    .get-key-btn {
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.45rem 0.85rem;
+      background: rgba(0, 108, 190, 0.12);
+      border: 1px solid var(--cta);
+      color: var(--cta);
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      text-decoration: none;
+      border-radius: 4px;
+      transition: background 0.15s, color 0.15s;
+      white-space: nowrap;
+    }
+    .get-key-btn:hover { background: var(--cta); color: var(--fg); }
+    .get-key-btn .ext-icon { font-size: 12px; line-height: 1; }
+
+    .key-steps {
+      margin-top: 0.85rem;
+      padding: 0.85rem 1rem;
+      background: rgba(0, 108, 190, 0.05);
+      border: 1px solid var(--border);
+      border-left: 2px solid var(--cta);
+      border-radius: 4px;
+    }
+    .key-steps-title {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.2em;
+      color: var(--fg-muted);
+      margin-bottom: 0.5rem;
+    }
+    .key-steps ol {
+      margin: 0; padding-left: 1.25rem;
+      list-style-position: outside;
+    }
+    .key-steps li {
+      font-family: var(--font-sans);
+      font-size: 13px;
+      line-height: 1.55;
+      color: var(--fg-muted);
+      padding-left: 0.2rem;
+      margin-bottom: 0.15rem;
+    }
+    .key-steps li:last-child { margin-bottom: 0; }
+    .key-steps li strong { color: var(--fg); font-weight: 500; }
+
     .key-input-wrap { display: flex; align-items: stretch; border: 1px solid var(--border-strong); width: 100%; background: var(--bg-input); }
     .key-input { flex: 1; min-width: 0; padding: 0.7rem 0.9rem; border: none; background: transparent; font-family: var(--font-mono); font-size: 13px; color: var(--fg); outline: none; }
     .key-input::placeholder { color: var(--fg-faint); }
@@ -816,7 +870,12 @@
       <!-- API key panel -->
       <div class="panel" style="margin-bottom: 1rem;">
         <div class="key-panel">
-          <div class="key-label mono-sm" style="color: var(--ink);">OpenAI API Key</div>
+          <div class="key-header">
+            <div class="key-label mono-sm">OpenAI API Key</div>
+            <a class="get-key-btn" href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">
+              Get API Key <span class="ext-icon" aria-hidden="true">↗</span>
+            </a>
+          </div>
           <div id="key-edit-mode">
             <div class="key-input-wrap">
               <input id="api-key" class="key-input" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false" autocapitalize="off">
@@ -826,16 +885,25 @@
               <button id="save-key" class="btn primary">Save Key</button>
               <div id="key-error" class="err-inline hidden"></div>
             </div>
+            <div class="key-steps">
+              <div class="key-steps-title">Don't have one yet?</div>
+              <ol>
+                <li>Tap <strong>Get API Key</strong> above &mdash; opens OpenAI in a new tab</li>
+                <li>Sign in or create an OpenAI account</li>
+                <li>Click <strong>Create new secret key</strong></li>
+                <li>Copy the key (it's only shown once) and paste it here</li>
+              </ol>
+            </div>
           </div>
           <div id="key-saved-mode" class="hidden">
             <div class="key-saved-line">
               <span class="check">✓</span>
               <span class="key-preview" id="key-preview"></span>
-              <button id="clear-key" class="reveal-btn" type="button" style="border-left: 1px solid var(--ink);">Change</button>
+              <button id="clear-key" class="reveal-btn" type="button">Change</button>
             </div>
           </div>
           <div class="key-help">
-            Saved in this browser only. Wiped from server memory after each request. <strong>Note:</strong> OpenAI keeps audio you transcribe for 30 days per their policy. Get a key at <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener">platform.openai.com/api-keys</a>.
+            Saved in this browser only. Wiped from server memory after each request. <strong>Note:</strong> OpenAI keeps audio you transcribe for 30 days per their policy.
           </div>
         </div>
       </div>
