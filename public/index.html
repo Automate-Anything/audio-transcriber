@@ -1107,6 +1107,41 @@
     .tx-search-count { font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); white-space: nowrap; }
     .tx-search-hit { background: rgba(245, 200, 66, 0.25); border-radius: 2px; }
     .tx-search-hit.current { background: rgba(245, 200, 66, 0.6); color: #1a1a1a; }
+    /* Synced player */
+    .sync-player {
+      display: flex; align-items: center; gap: 0.75rem;
+      padding: 0.7rem 1.5rem; border-bottom: 1px solid var(--border);
+      background: var(--bg-card);
+    }
+    .sync-player audio { display: none; }
+    .sync-play {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 38px; height: 38px; flex-shrink: 0;
+      background: var(--cta); border: none; border-radius: 50%;
+      color: var(--fg); cursor: pointer; transition: background 0.15s, transform 0.1s;
+    }
+    .sync-play:hover { background: var(--cta-hover); }
+    .sync-play:active { transform: scale(0.94); }
+    .sync-play svg { margin-left: 1px; }
+    .sync-play #sync-pause-icon { margin-left: 0; }
+    .sync-time { font-family: var(--font-mono); font-size: 11px; color: var(--fg-muted); font-variant-numeric: tabular-nums; min-width: 3em; }
+    .sync-scrub {
+      flex: 1; -webkit-appearance: none; appearance: none; height: 4px;
+      background: var(--border-strong); border-radius: 2px; outline: none; cursor: pointer;
+      background-image: linear-gradient(var(--cta), var(--cta)); background-repeat: no-repeat; background-size: 0% 100%;
+    }
+    .sync-scrub::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 14px; height: 14px; background: var(--cta); border-radius: 50%; cursor: pointer; }
+    .sync-scrub::-moz-range-thumb { width: 14px; height: 14px; background: var(--cta); border: none; border-radius: 50%; cursor: pointer; }
+    .sync-hint { color: var(--fg-faint); white-space: nowrap; }
+    @media (max-width: 640px) { .sync-hint { display: none; } }
+    .turn.sync-active, .seg-line.sync-active { background: rgba(0,108,190,0.1); border-radius: 6px; }
+    .turn { cursor: default; transition: background 0.2s; }
+    .turn.clickable, .seg-line.clickable { cursor: pointer; }
+    .turn.clickable:hover, .seg-line.clickable:hover { background: rgba(75,108,140,0.08); border-radius: 6px; }
+    /* Whisper segment lines (for synced plain transcript) */
+    .seg-lines { display: flex; flex-direction: column; gap: 0.15rem; }
+    .seg-line { padding: 0.25rem 0.5rem; font-family: var(--font-serif); font-size: 1.05rem; line-height: 1.7; color: var(--fg); transition: background 0.2s; }
+    .seg-line-time { font-family: var(--font-mono); font-size: 10px; color: var(--fg-faint); margin-right: 0.6rem; }
     /* Editable transcript */
     #transcript-text[contenteditable="true"],
     .turn-text[contenteditable="true"] {
@@ -1906,6 +1941,17 @@
             <input id="tx-search" class="tx-search" type="search" placeholder="Search transcript…" aria-label="Search transcript">
             <span id="tx-search-count" class="tx-search-count"></span>
           </div>
+          <div id="sync-player" class="sync-player hidden">
+            <button id="sync-play" class="sync-play" type="button" aria-label="Play">
+              <svg id="sync-play-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+              <svg id="sync-pause-icon" width="20" height="20" viewBox="0 0 24 24" fill="currentColor" class="hidden"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>
+            </button>
+            <span id="sync-cur" class="sync-time">0:00</span>
+            <input id="sync-scrub" class="sync-scrub" type="range" min="0" max="1000" value="0" aria-label="Seek">
+            <span id="sync-dur" class="sync-time">0:00</span>
+            <span class="sync-hint mono-sm">tap a line to jump</span>
+            <audio id="sync-audio" preload="metadata"></audio>
+          </div>
           <div class="tx-body" id="tx-body-root">
             <p id="transcript-text"></p>
             <div id="transcript-turns" class="turns hidden"></div>
@@ -2517,12 +2563,40 @@
           const speakers = new Set(state.utterances.map(u => u.speaker));
           $('word-count').textContent = `Transcript · ${words} words · ${speakers.size} speaker${speakers.size === 1 ? '' : 's'}`;
           renderTurns();
+        } else if (Array.isArray(state.segments) && state.segments.length && !state.editing) {
+          // Whisper with timestamps: render clickable segment lines for sync
+          $('word-count').textContent = `Transcript · ${words} words`;
+          renderSegmentLines();
         } else {
           $('word-count').textContent = `Transcript · ${words} words`;
           $('transcript-text').textContent = state.transcript;
         }
+
+        // Set up (or refresh) the synced audio player when we have audio + cues
+        setupSyncPlayer();
+      } else {
+        teardownSyncPlayer();
       }
     }
+
+    // Render Whisper segments as clickable lines (for synced playback)
+    function renderSegmentLines() {
+      const p = $('transcript-text');
+      p.innerHTML = '';
+      const wrap = document.createElement('span');
+      wrap.className = 'seg-lines';
+      state.segments.forEach((s, i) => {
+        const line = document.createElement('span');
+        line.className = 'seg-line clickable';
+        const t = document.createElement('span');
+        t.className = 'seg-line-time';
+        t.textContent = fmtTimeMs((s.start || 0) * 1000);
+        line.appendChild(t);
+        line.appendChild(document.createTextNode(s.text));
+        line.addEventListener('click', () => seekToCue(i));
+        wrap.appendChild(line);
+      });
+      p.appendChild(wrap);
 
     // ============================================================================
     // Diarized transcript renderer
@@ -2556,10 +2630,19 @@
       const container = $('transcript-turns');
       container.innerHTML = '';
       if (!Array.isArray(state.utterances)) return;
-      for (const u of state.utterances) {
+      for (let ti = 0; ti < state.utterances.length; ti++) {
+        const u = state.utterances[ti];
         const wrap = document.createElement('div');
         wrap.className = 'turn';
         wrap.dataset.speakerIdx = speakerIdx(u.speaker);
+        // Clicking a turn seeks the synced player to its start (when audio loaded)
+        if (sync.ready && !state.editing) {
+          wrap.classList.add('clickable');
+          wrap.addEventListener('click', (e) => {
+            if (e.target.closest('.turn-speaker')) return; // let rename handle its own click
+            seekToCue(ti);
+          });
+        }
 
         const meta = document.createElement('div');
         meta.className = 'turn-meta';
@@ -2816,6 +2899,126 @@
       if (confirm('Clear all saved transcripts? This cannot be undone.')) {
         try { localStorage.removeItem(HISTORY_STORAGE); } catch {}
         renderHistory();
+      }
+    });
+
+    // ============================================================================
+    // Synced playback: audio player tied to the transcript
+    // ============================================================================
+    const sync = { url: null, cues: [], activeIdx: -1, ready: false };
+
+    function teardownSyncPlayer() {
+      const audio = $('sync-audio');
+      try { audio.pause(); } catch {}
+      if (sync.url) { URL.revokeObjectURL(sync.url); sync.url = null; }
+      audio.removeAttribute('src');
+      sync.cues = []; sync.activeIdx = -1; sync.ready = false;
+      $('sync-player').classList.add('hidden');
+    }
+
+    function setupSyncPlayer() {
+      // Need a playable source. state.file is a File (uploaded or recorded).
+      // Only set up when we have both audio and timestamped cues.
+      const cues = timedCues();
+      const audioEl = $('sync-audio');
+      const canPlay = state.file && state.file.size > 0 && cues.length > 0 && !state.editing;
+      if (!canPlay) { $('sync-player').classList.add('hidden'); return; }
+
+      // (Re)build object URL only if the file changed
+      if (!sync.ready) {
+        try {
+          if (sync.url) URL.revokeObjectURL(sync.url);
+          sync.url = URL.createObjectURL(state.file);
+          audioEl.src = sync.url;
+          audioEl.load();
+          sync.ready = true;
+        } catch { $('sync-player').classList.add('hidden'); return; }
+      }
+      sync.cues = cues;
+      $('sync-player').classList.remove('hidden');
+    }
+
+    function syncSetPlayIcon(playing) {
+      $('sync-play-icon').classList.toggle('hidden', playing);
+      $('sync-pause-icon').classList.toggle('hidden', !playing);
+      $('sync-play').setAttribute('aria-label', playing ? 'Pause' : 'Play');
+    }
+
+    function highlightCue(idx) {
+      if (idx === sync.activeIdx) return;
+      // Clear previous
+      document.querySelectorAll('.sync-active').forEach(el => el.classList.remove('sync-active'));
+      sync.activeIdx = idx;
+      if (idx < 0) return;
+      const diarized = Array.isArray(state.utterances) && state.utterances.length > 0;
+      const sel = diarized ? '#transcript-turns .turn' : '#transcript-text .seg-line';
+      const els = document.querySelectorAll(sel);
+      if (els[idx]) {
+        els[idx].classList.add('sync-active');
+        const body = $('tx-body-root');
+        const r = els[idx].getBoundingClientRect();
+        const br = body.getBoundingClientRect();
+        if (r.top < br.top || r.bottom > br.bottom) {
+          els[idx].scrollIntoView({ block: 'center', behavior: 'smooth' });
+        }
+      }
+    }
+
+    (function wireSyncPlayer() {
+      const audio = $('sync-audio');
+      const scrub = $('sync-scrub');
+      audio.addEventListener('loadedmetadata', () => {
+        $('sync-dur').textContent = fmtPbTime(audio.duration);
+      });
+      audio.addEventListener('play', () => syncSetPlayIcon(true));
+      audio.addEventListener('pause', () => syncSetPlayIcon(false));
+      audio.addEventListener('ended', () => { syncSetPlayIcon(false); highlightCue(-1); });
+      audio.addEventListener('timeupdate', () => {
+        const t = audio.currentTime;
+        $('sync-cur').textContent = fmtPbTime(t);
+        if (isFinite(audio.duration) && audio.duration > 0) {
+          const pct = (t / audio.duration) * 100;
+          scrub.value = Math.round(pct * 10);
+          scrub.style.backgroundSize = pct + '% 100%';
+        }
+        // Find the cue covering the current time
+        let idx = -1;
+        for (let i = 0; i < sync.cues.length; i++) {
+          if (t >= sync.cues[i].start && t < (sync.cues[i].end || Infinity)) { idx = i; break; }
+          if (t >= sync.cues[i].start) idx = i; // fallback to last started
+        }
+        highlightCue(idx);
+      });
+      $('sync-play').addEventListener('click', () => {
+        if (audio.paused) audio.play().catch(() => {}); else audio.pause();
+      });
+      scrub.addEventListener('input', () => {
+        if (isFinite(audio.duration) && audio.duration > 0) {
+          audio.currentTime = (scrub.value / 1000) * audio.duration;
+        }
+      });
+    })();
+
+    function seekToCue(idx) {
+      const audio = $('sync-audio');
+      if (!sync.cues[idx]) return;
+      audio.currentTime = sync.cues[idx].start;
+      audio.play().catch(() => {});
+    }
+
+    // Keyboard shortcuts during review (only when not typing in a field)
+    document.addEventListener('keydown', (e) => {
+      if ($('sync-player').classList.contains('hidden')) return;
+      const tag = (e.target.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || e.target.isContentEditable) return;
+      const audio = $('sync-audio');
+      if (e.code === 'Space') {
+        e.preventDefault();
+        if (audio.paused) audio.play().catch(() => {}); else audio.pause();
+      } else if (e.code === 'ArrowLeft') {
+        e.preventDefault(); audio.currentTime = Math.max(0, audio.currentTime - 5);
+      } else if (e.code === 'ArrowRight') {
+        e.preventDefault(); audio.currentTime = Math.min(audio.duration || 1e9, audio.currentTime + 5);
       }
     });
 
