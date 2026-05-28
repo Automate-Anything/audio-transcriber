@@ -580,11 +580,17 @@ app.post('/api/post-process', postProcessLimiter, express.json({ limit: '4mb' })
         'staying readable.'
       );
       if (wantActions) fields.push(
-        '"actionItems": an array of concrete next steps that were stated or clearly implied. Each item is ' +
-        'one specific, actionable string phrased as an imperative (start with a verb), self-contained enough ' +
-        'to understand on its own. Where the transcript makes it clear, include who is responsible and any ' +
-        'deadline or condition. Capture follow-ups, commitments, things to research, build, send, fix, or ' +
-        'decide. Do not invent tasks that were not discussed. Return an empty array if there genuinely are none.'
+        '"actionItems": an array of the concrete next steps from this conversation. Apply these rules ' +
+        'consistently so the same transcript always yields the same list:\n' +
+        '  • INCLUDE a step only if someone explicitly committed to it, was asked/assigned to do it, or the ' +
+        'group clearly agreed it should happen. Look for language like "I\'ll...", "we need to...", "can you...", ' +
+        '"let\'s...", "the next step is...", "by [date]".\n' +
+        '  • EXCLUDE general discussion, opinions, background, ideas mentioned in passing, and things that were ' +
+        'considered but not agreed. If it was only talked about, it is NOT an action item.\n' +
+        '  • Write each item as one short imperative sentence starting with a verb, self-contained. Include the ' +
+        'responsible person and any deadline when the transcript states them. Do not invent or infer tasks that ' +
+        'were not actually raised. Merge duplicates. Order them by the order they came up.\n' +
+        '  • If there are genuinely no committed next steps, return an empty array — do not pad the list.'
       );
       const sys = 'You are a precise meeting/transcript analyst. You read carefully and capture specifics — ' +
         'names, numbers, decisions, and concrete next steps — rather than generic summaries. Respond with a ' +
@@ -598,7 +604,12 @@ app.post('/api/post-process', postProcessLimiter, express.json({ limit: '4mb' })
         messages: [{ role: 'system', content: sys }, { role: 'user', content: prompt }],
         response_format: { type: 'json_object' },
         max_tokens: 2000,
-        temperature: 0.4,
+        // temperature 0 + a fixed seed make repeated runs of the SAME
+        // transcript produce the same result (best-effort reproducibility).
+        // This was the main cause of action-item lists varying wildly
+        // between identical uploads.
+        temperature: 0,
+        seed: 1234,
       });
       let parsed = {};
       try { parsed = JSON.parse(completion.choices[0].message.content); } catch {}
@@ -616,7 +627,8 @@ app.post('/api/post-process', postProcessLimiter, express.json({ limit: '4mb' })
           { role: 'user', content: text },
         ],
         max_tokens: 8000,
-        temperature: 0.2,
+        temperature: 0,
+        seed: 1234,
       });
       result.translation = (completion.choices[0].message.content || '').trim();
       result.translationLanguage = lang;
