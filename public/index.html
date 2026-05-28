@@ -838,44 +838,13 @@
       margin: 0 0.15em;
       font-size: 0.85em;
     }
-    .dz-formats {
+    .dz-formats-line {
       margin-top: 1.5rem;
-      display: flex; flex-direction: column;
-      gap: 0.4rem;
-      max-width: 30rem;
-      margin-left: auto; margin-right: auto;
-    }
-    .dz-format-row {
-      display: flex; align-items: baseline;
-      gap: 0.65rem;
-      justify-content: center;
-      flex-wrap: wrap;
-    }
-    .dz-format-label {
       font-family: var(--font-mono);
-      font-size: 9px;
+      font-size: 10.5px;
+      letter-spacing: 0.18em;
       text-transform: uppercase;
-      letter-spacing: 0.25em;
-      color: var(--fg-muted);
-      min-width: 3em;
-      text-align: right;
-    }
-    .dz-format-list {
-      font-family: var(--font-mono);
-      font-size: 11px;
-      color: #cbd5e1;
-      letter-spacing: 0.08em;
-    }
-    .dz-examples {
-      margin-top: 1.15rem;
-      padding-top: 0.85rem;
-      border-top: 1px solid var(--border);
-      font-family: var(--font-sans);
-      font-size: 12px;
-      font-style: italic;
       color: var(--fg-faint);
-      max-width: 30rem;
-      margin-left: auto; margin-right: auto;
     }
     @media (min-width: 768px) { .dz-visual { padding: 3.5rem 2rem; } .dz-visual h2 { font-size: 2.25rem; } }
 
@@ -1424,17 +1393,7 @@
         <div class="dz-visual">
           <div class="mono-sm" style="margin-bottom: 1.25rem;">[ Tap or drop file ]</div>
           <h2>Audio <span class="dz-or">or</span> Video</h2>
-          <div class="dz-formats">
-            <div class="dz-format-row">
-              <span class="dz-format-label">Audio</span>
-              <span class="dz-format-list">MP3 · M4A · WAV · AAC · OGG · FLAC · OPUS</span>
-            </div>
-            <div class="dz-format-row">
-              <span class="dz-format-label">Video</span>
-              <span class="dz-format-list">MP4 · MOV · WEBM · MKV · AVI · WMV</span>
-            </div>
-          </div>
-          <div class="dz-examples">iPhone voice memos · Zoom recordings · screen captures · podcasts</div>
+          <div class="dz-formats-line">MP3 · M4A · WAV · MP4 · MOV · WEBM · and more</div>
         </div>
       </label>
 
