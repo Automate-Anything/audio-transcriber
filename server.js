@@ -207,7 +207,22 @@ const jobs = new Map();
 
 app.get('/health', (req, res) => res.json({ ok: true }));
 
+// Graceful-shutdown flag. Flipped to true on SIGTERM so new submissions get a
+// clean "server updating" response instead of a half-handled request that
+// dies mid-flight. In-flight polling endpoints keep working until the
+// container is torn down.
+let shuttingDown = false;
+
+// Lightweight version probe. The client polls this to know when a new build
+// has been deployed, so it can offer a non-intrusive "update available"
+// hint. Bumped manually by us in commits.
+const BUILD_VERSION = process.env.BUILD_VERSION || 'dev';
+app.get('/api/version', (req, res) => res.json({ version: BUILD_VERSION, shuttingDown }));
+
 app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
+  if (shuttingDown) {
+    return res.status(503).json({ error: 'Server is updating — try again in a moment.' });
+  }
   upload.single('file')(req, res, (err) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
@@ -442,12 +457,23 @@ async function processAssemblyJob(job) {
 
   const startTime = Date.now();
   const MAX_WAIT_MS = 30 * 60 * 1000; // 30 minutes ceiling
+  await pollAssemblyToCompletion(job, submitData.id, startTime, MAX_WAIT_MS);
+}
+
+// Polls an AssemblyAI transcript by ID until completion or error, populating
+// the job fields. Used by both the fresh AssemblyAI flow and the reattach
+// flow (where a different server instance / version takes over an existing
+// transcript that's still being processed on AssemblyAI).
+async function pollAssemblyToCompletion(job, transcriptId, startTime, MAX_WAIT_MS) {
+  if (!startTime) startTime = Date.now();
+  if (!MAX_WAIT_MS) MAX_WAIT_MS = 30 * 60 * 1000;
+  job.assemblyTranscriptId = transcriptId;
   while (true) {
     if (Date.now() - startTime > MAX_WAIT_MS) {
       throw new Error('AssemblyAI took too long to finish (30+ minutes).');
     }
     await sleep(4000);
-    const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${submitData.id}`, {
+    const pollRes = await fetch(`https://api.assemblyai.com/v2/transcript/${transcriptId}`, {
       headers: { 'Authorization': job.apiKey },
     });
     if (!pollRes.ok) {
@@ -457,8 +483,6 @@ async function processAssemblyJob(job) {
     const pollData = await pollRes.json();
 
     if (pollData.status === 'completed') {
-      // Build the utterances array for the client. Each utterance:
-      // { speaker, text, start_ms, end_ms }
       const utterances = Array.isArray(pollData.utterances)
         ? pollData.utterances.map(u => ({
             speaker: u.speaker || 'A',
@@ -466,7 +490,6 @@ async function processAssemblyJob(job) {
             start_ms: typeof u.start === 'number' ? u.start : 0,
             end_ms: typeof u.end === 'number' ? u.end : 0,
             confidence: typeof u.confidence === 'number' ? u.confidence : null,
-            // Per-word confidence lets the client highlight uncertain words.
             words: Array.isArray(u.words)
               ? u.words.map(w => ({
                   text: w.text || '',
@@ -488,18 +511,13 @@ async function processAssemblyJob(job) {
     if (pollData.status === 'error') {
       throw new Error(pollData.error || 'AssemblyAI returned an error.');
     }
-    // queued, processing -> ease progress upward but cap before "done".
-    // Estimate expected processing time from file size: compressed audio
-    // is typically ~16 KB/sec (~128 kbps), and AssemblyAI processes at
-    // roughly 10x realtime in batch. So expected_ms ≈ (size/16000) * 100.
-    // Minimum 15s, maximum 10min as guardrails.
     const elapsed = Date.now() - startTime;
-    const estimatedAudioSec = Math.max(10, job.fileSize / 16000);
+    const estimatedAudioSec = Math.max(10, (job.fileSize || 100000) / 16000);
     const expectedMs = Math.min(600000, Math.max(15000, estimatedAudioSec * 100));
-    // Map elapsed into [0.25, 0.95] using the expected window — won't reach
-    // 100% from estimation alone; only the 'completed' branch above does.
     const frac = Math.min(1, elapsed / expectedMs);
     job.progress = Math.min(0.95, 0.25 + frac * 0.70);
+    job.stage = 'transcribing';
+    job.message = 'Transcribing — this can take a few minutes';
   }
 }
 
@@ -529,6 +547,10 @@ app.get('/api/jobs/:id', jobsLimiter, (req, res) => {
     transcript: job.transcript,
     utterances: job.utterances,
     segments: job.segments || null,
+    // The AssemblyAI transcript ID is the "claim ticket" — once the client
+    // has it, the work survives any restart of this server because the
+    // transcript itself lives on AssemblyAI. See /api/assembly/reattach.
+    assemblyTranscriptId: job.assemblyTranscriptId || null,
     error: job.error,
     chunkInfo: job.chunkInfo,
     duration: job.duration,
@@ -536,6 +558,69 @@ app.get('/api/jobs/:id', jobsLimiter, (req, res) => {
     originalName: job.originalName,
     pathTaken: job.pathTaken,
   });
+});
+
+// ============================================================================
+// Re-attach: pick up an existing AssemblyAI transcript by its ID. This is how
+// in-flight Multiple-speakers jobs survive a server deploy/restart — the work
+// itself runs on AssemblyAI's servers, so as long as the client kept the
+// transcript ID (it persists it to localStorage from the job status), any
+// version of this server can resume polling and return the result.
+//
+// The client supplies its own AssemblyAI key as Bearer; AssemblyAI only
+// returns transcripts created with that key, so a user can never reach
+// another user's transcript here.
+// ============================================================================
+app.post('/api/assembly/reattach', transcribeLimiter, express.json({ limit: '64kb' }), (req, res) => {
+  if (shuttingDown) return res.status(503).json({ error: 'Server is updating — try again in a moment.' });
+  const auth = req.headers.authorization || '';
+  const apiKey = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (!apiKey) return res.status(401).json({ error: 'AssemblyAI key required.' });
+
+  const transcriptId = (req.body.transcriptId || '').toString().trim();
+  // AssemblyAI transcript IDs are URL-safe lowercase alphanumerics + dashes.
+  // Validate the shape so an invalid value can't be smuggled into the URL.
+  if (!transcriptId || !/^[a-z0-9_-]{8,80}$/i.test(transcriptId)) {
+    return res.status(400).json({ error: 'Invalid transcriptId.' });
+  }
+
+  const jobId = crypto.randomBytes(12).toString('hex');
+  const job = {
+    id: jobId,
+    provider: 'assemblyai',
+    status: 'processing',
+    stage: 'transcribing',
+    message: 'Reconnecting to AssemblyAI',
+    progress: 0.3,
+    transcript: '',
+    utterances: null,
+    error: null,
+    duration: null,
+    fileSize: Number(req.body.fileSize) || 0,
+    originalName: (req.body.fileName || 'Recording').toString().slice(0, 200),
+    inputPath: null,   // no local file — the audio already lives on AssemblyAI
+    workDir: null,
+    chunkInfo: { current: 0, total: 0, usedSilence: 0 },
+    pathTaken: 'assemblyai-reattach',
+    language: '',
+    keyterms: '',
+    codeSwitching: false,
+    csLanguages: '',
+    createdAt: Date.now(),
+    apiKey,
+    assemblyTranscriptId: transcriptId,
+  };
+  jobs.set(jobId, job);
+
+  // Fire-and-forget poll, same model as the normal flow
+  pollAssemblyToCompletion(job, transcriptId).catch(err => {
+    console.error(`[${jobId}] reattach error:`, err);
+    job.status = 'error';
+    job.stage  = 'error';
+    job.error  = sanitizeAssemblyError(err);
+  });
+
+  res.json({ jobId });
 });
 
 // ============================================================================
@@ -1101,3 +1186,17 @@ app.listen(PORT, () => {
   if (PAIRING_CODE) console.log(`Phoning home with pairing code: ${PAIRING_CODE}`);
   registerSelf();
 });
+
+// Graceful shutdown: when Render sends SIGTERM ahead of a deploy/restart,
+// flip the drain flag so new submissions get a clean 'server updating'
+// response. In-flight polling and reattach calls keep working until the
+// container is killed. The actual Multiple-speakers jobs survive a restart
+// because their work lives on AssemblyAI — the client persists the
+// transcript ID and calls /api/assembly/reattach against the new instance.
+function onShutdownSignal(sig) {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`[${sig}] draining: refusing new submissions; existing polls/reattach still served`);
+}
+process.on('SIGTERM', () => onShutdownSignal('SIGTERM'));
+process.on('SIGINT',  () => onShutdownSignal('SIGINT'));

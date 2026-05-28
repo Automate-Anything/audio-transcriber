@@ -2710,26 +2710,105 @@
       });
     }
 
-    async function pollJob(jobId, onUpdate) {
+    // Poll the server's job status. Resilient to transient failures (brief
+    // server restart during a deploy): retries with backoff before giving
+    // up. If the server returns 404 for the job (in-memory job lost), tries
+    // to transparently re-attach via the AssemblyAI transcript ID we
+    // persisted to localStorage — the work is still running on AssemblyAI.
+    async function pollJob(initialJobId, onUpdate) {
+      let jobId = initialJobId;
+      let consecutiveFailures = 0;
+      let attemptedReattach = false;
       while (true) {
-        let res, data;
+        let res, networkErr;
         try { res = await fetch(`${apiBase()}/api/jobs/${jobId}`); }
-        catch { throw new Error('Lost connection to server.'); }
-        if (!res.ok) throw new Error('Job not found (server may have restarted).');
-        data = await res.json();
+        catch (e) { networkErr = e; }
+
+        // Network error or 5xx: the server is briefly unreachable (deploy
+        // gap). Back off and try again a few times before giving up.
+        const transient = networkErr || (res && res.status >= 500);
+        if (transient) {
+          consecutiveFailures++;
+          if (consecutiveFailures > 5) {
+            throw new Error('Lost connection to server.');
+          }
+          state.message = 'Reconnecting to server…';
+          render();
+          await new Promise(r => setTimeout(r, 1500 * consecutiveFailures));
+          continue;
+        }
+
+        // 404: the in-memory job is gone (server restarted between requests).
+        // If we have an AssemblyAI transcript ID, transparently reattach.
+        if (res.status === 404) {
+          const saved = readActiveJob();
+          if (!attemptedReattach && saved && saved.assemblyTranscriptId && state.assemblyKey) {
+            attemptedReattach = true;
+            state.message = 'Server updated — reconnecting your job…';
+            render();
+            try {
+              const newId = await reattachAssembly(saved.assemblyTranscriptId, saved.fileName, saved.fileSize);
+              jobId = newId;
+              state.jobId = newId;
+              saveActiveJob(newId, saved.assemblyTranscriptId, saved.fileName, saved.fileSize);
+              consecutiveFailures = 0;
+              continue;
+            } catch (e) {
+              throw new Error('Could not reconnect: ' + (e.message || e));
+            }
+          }
+          throw new Error('Job not found (server may have restarted).');
+        }
+
+        if (!res.ok) throw new Error('Server returned ' + res.status);
+
+        consecutiveFailures = 0;
+        const data = await res.json();
+        // Persist the AssemblyAI transcript ID as soon as we see it — this
+        // is what lets us reattach across restarts.
+        if (data.provider === 'assemblyai' && data.assemblyTranscriptId) {
+          saveActiveJob(jobId, data.assemblyTranscriptId, state.file?.name, state.file?.size);
+        }
         onUpdate(data);
         if (data.status === 'done' || data.status === 'error') return data;
         await new Promise(r => setTimeout(r, 2000));
       }
     }
 
-    function saveActiveJob(jobId) {
-      try { localStorage.setItem(ACTIVE_JOB_STORAGE, JSON.stringify({
-        jobId, serverUrl: state.serverUrl || '', fileName: state.file?.name || 'Recording', at: Date.now(),
-      })); } catch {}
+    function readActiveJob() {
+      try { return JSON.parse(localStorage.getItem(ACTIVE_JOB_STORAGE) || 'null'); }
+      catch { return null; }
+    }
+    function saveActiveJob(jobId, assemblyTranscriptId, fileName, fileSize) {
+      try {
+        const prev = readActiveJob() || {};
+        localStorage.setItem(ACTIVE_JOB_STORAGE, JSON.stringify({
+          jobId,
+          serverUrl: state.serverUrl || '',
+          fileName: fileName || prev.fileName || state.file?.name || 'Recording',
+          fileSize: fileSize ?? prev.fileSize ?? state.file?.size ?? 0,
+          assemblyTranscriptId: assemblyTranscriptId || prev.assemblyTranscriptId || null,
+          at: Date.now(),
+        }));
+      } catch {}
     }
     function clearActiveJob() {
       try { localStorage.removeItem(ACTIVE_JOB_STORAGE); } catch {}
+    }
+
+    // Ask the server to start polling an existing AssemblyAI transcript on
+    // our behalf. Returns the new (server-side) jobId we'll poll going
+    // forward.
+    async function reattachAssembly(transcriptId, fileName, fileSize) {
+      if (!state.assemblyKey) throw new Error('AssemblyAI key not available for reconnect.');
+      const res = await fetch(`${apiBase()}/api/assembly/reattach`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + state.assemblyKey },
+        body: JSON.stringify({ transcriptId, fileName: fileName || 'Recording', fileSize: fileSize || 0 }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || 'Reattach failed.');
+      return data.jobId;
     }
 
     // Poll a job to completion and finalize the UI. Shared by a fresh run()
@@ -2785,7 +2864,12 @@
           state.uploadProgress = p; render();
         });
         state.jobId = jobId;
-        saveActiveJob(jobId);
+        // Wipe any stale entry from a previous run before saving fresh —
+        // saveActiveJob carries prev values forward to make incremental
+        // updates easy, and we don't want a previous job's transcript ID
+        // accidentally riding along on a new job.
+        clearActiveJob();
+        saveActiveJob(jobId, null, state.file?.name, state.file?.size);
         state.message = 'Queued on server';
         state.stage = 'server-stage';
         render();
@@ -2800,28 +2884,43 @@
     }
 
     // Attempt to resume an in-flight job after a page reload. Best-effort:
-    // if the server no longer knows the job (restart / 404), we quietly
-    // clear it. We can't recover the original audio, so synced playback
-    // won't be available, but the transcript will appear.
+    // - If the server still knows the job, resume polling it.
+    // - If it doesn't (server restart wiped memory) BUT we have an
+    //   AssemblyAI transcript ID and key, reattach via /api/assembly/reattach
+    //   so the new server instance picks the transcript back up. The work
+    //   itself never stopped — it ran on AssemblyAI the whole time.
+    // - Otherwise clear and move on.
     async function recoverActiveJob() {
       let saved;
       try { saved = JSON.parse(localStorage.getItem(ACTIVE_JOB_STORAGE) || 'null'); } catch { saved = null; }
       if (!saved || !saved.jobId) return;
-      // Stale guard: don't try to recover jobs older than 1 hour
       if (Date.now() - (saved.at || 0) > 60 * 60 * 1000) { clearActiveJob(); return; }
       if (saved.serverUrl) state.serverUrl = saved.serverUrl;
-      // Probe once before committing the UI to a recovering state
       try {
-        const res = await fetch(`${apiBase()}/api/jobs/${saved.jobId}`);
-        if (!res.ok) { clearActiveJob(); return; }
+        let probeId = saved.jobId;
+        let res = await fetch(`${apiBase()}/api/jobs/${probeId}`);
+        if (!res.ok) {
+          // Server-side job is gone. Try reattach if we have what we need.
+          if (saved.assemblyTranscriptId && state.assemblyKey) {
+            try {
+              probeId = await reattachAssembly(saved.assemblyTranscriptId, saved.fileName, saved.fileSize);
+              saveActiveJob(probeId, saved.assemblyTranscriptId, saved.fileName, saved.fileSize);
+              res = await fetch(`${apiBase()}/api/jobs/${probeId}`);
+              if (!res.ok) { clearActiveJob(); return; }
+            } catch {
+              clearActiveJob(); return;
+            }
+          } else {
+            clearActiveJob(); return;
+          }
+        }
         const job = await res.json();
-        state.file = { name: saved.fileName || job.originalName || 'Recording', size: job.fileSize || 0 };
-        state.jobId = saved.jobId;
+        state.file = { name: saved.fileName || job.originalName || 'Recording', size: job.fileSize || saved.fileSize || 0 };
+        state.jobId = probeId;
         state.stage = job.stage || 'server-stage';
         state.message = job.message || 'Resuming…';
         startTimer(); render();
         if (job.status === 'done' || job.status === 'error') {
-          // Already finished while we were away — finalize directly
           if (job.status === 'error') { state.error = job.error || 'Server reported an error.'; state.stage = 'error'; render(); }
           else {
             state.transcript = job.transcript || '';
@@ -2831,8 +2930,7 @@
           }
           stopTimer(); clearActiveJob(); return;
         }
-        // Still running — resume polling
-        await pollAndFinalize(saved.jobId);
+        await pollAndFinalize(probeId);
         clearActiveJob();
       } catch {
         clearActiveJob();
