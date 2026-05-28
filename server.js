@@ -128,7 +128,9 @@ const postProcessLimiter = rateLimit({
   message: { error: 'You\'ve hit the hourly limit for summary/translation on this server.' },
 });
 
-app.use(express.json({ limit: '64kb' }));
+// JSON body parsing is applied per-route (not globally) so the large
+// transcript bodies on /api/post-process aren't capped by the small limit
+// the pairing endpoints want. /api/transcribe uses multipart (multer).
 app.use(express.static('public'));
 
 // ============================================================================
@@ -145,7 +147,7 @@ setInterval(() => {
   }
 }, 5 * 60 * 1000);
 
-app.post('/api/pair/register', pairRegisterLimiter, (req, res) => {
+app.post('/api/pair/register', pairRegisterLimiter, express.json({ limit: '64kb' }), (req, res) => {
   const code = String((req.body && req.body.code) || '').trim().toLowerCase();
   const url  = String((req.body && req.body.url)  || '').trim();
   if (!code || !url) return res.status(400).json({ error: 'code and url required' });
