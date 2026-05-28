@@ -41,6 +41,7 @@
       --bg-input:     #0a1322;
       --fg:           #ffffff;
       --fg-muted:     #94a3b8;
+      --fg-soft:      #cbd5e1;
       --fg-faint:     rgba(148, 163, 184, 0.65);
       --accent:       #4b6c8c;
       --cta:          #006cbe;
@@ -63,6 +64,25 @@
       --ink-dim:      var(--border-strong);
       --ink-faint:    var(--border);
       --ink-fainter:  var(--border-faint);
+    }
+    /* Light theme — overriding the base vars cascades to every component
+       and the legacy aliases (which resolve var() at use time). The top
+       nav intentionally stays dark to match the AutomateAnything brand. */
+    [data-theme="light"] {
+      --bg:           #f1f5f9;
+      --bg-alt:       #ffffff;
+      --bg-card:      #ffffff;
+      --bg-input:     #f8fafc;
+      --fg:           #0f1a2e;
+      --fg-muted:     #475569;
+      --fg-soft:      #334155;
+      --fg-faint:     rgba(71, 85, 105, 0.6);
+      --accent:       #2c5478;
+      --cta:          #006cbe;
+      --cta-hover:    #0080dc;
+      --border:       rgba(15, 26, 46, 0.12);
+      --border-strong:rgba(15, 26, 46, 0.28);
+      --border-faint: rgba(15, 26, 46, 0.06);
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body {
@@ -203,6 +223,16 @@
 
     .topnav-right { display: none; align-items: center; gap: 1.5rem; }
     @media (min-width: 1024px) { .topnav-right { display: flex; } }
+    .theme-toggle {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 38px; height: 38px; flex-shrink: 0;
+      background: transparent; border: 1px solid rgba(148,163,184,0.25);
+      border-radius: 8px; color: var(--aa-text); cursor: pointer;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+      margin-left: auto;
+    }
+    .theme-toggle:hover { color: var(--aa-text-strong); border-color: rgba(148,163,184,0.5); background: rgba(148,163,184,0.08); }
+    @media (min-width: 1024px) { .theme-toggle { margin-left: 0; } }
     @media (min-width: 1280px) { .topnav-right { gap: 2rem; } }
 
     /* Dropdown panels */
@@ -511,7 +541,7 @@
     .keyterms-summary::-webkit-details-marker { display: none; }
     .keyterms-summary-text {
       font-family: var(--font-mono); font-size: 10.5px;
-      text-transform: uppercase; letter-spacing: 0.18em; color: #cbd5e1;
+      text-transform: uppercase; letter-spacing: 0.18em; color: var(--fg-soft);
     }
     .keyterms-optional { color: var(--fg-faint); }
     .keyterms-chev { color: var(--cta); transition: transform 0.25s; flex-shrink: 0; }
@@ -575,7 +605,7 @@
       font-family: var(--font-sans);
       font-size: 12.5px;
       line-height: 1.5;
-      color: #cbd5e1;
+      color: var(--fg-soft);
     }
     .rec-type-card .rec-type-provider {
       font-family: var(--font-mono);
@@ -635,7 +665,7 @@
       font-size: 10.5px;
       text-transform: uppercase;
       letter-spacing: 0.2em;
-      color: #cbd5e1;
+      color: var(--fg-soft);
     }
     .key-steps-toggle {
       display: inline-flex; align-items: center;
@@ -676,7 +706,7 @@
       font-family: var(--font-sans);
       font-size: 14px;
       line-height: 1.6;
-      color: #cbd5e1;
+      color: var(--fg-soft);
       padding-left: 0.25rem;
       margin-bottom: 0.35rem;
     }
@@ -690,7 +720,7 @@
       font-family: var(--font-sans);
       font-size: 12.5px;
       line-height: 1.55;
-      color: #cbd5e1;
+      color: var(--fg-soft);
     }
     .key-steps-note strong { color: var(--fg); font-weight: 600; }
 
@@ -703,7 +733,7 @@
     .key-saved-line { display: flex; align-items: center; gap: 0.6rem; padding: 0.7rem 0.9rem; border: 1px solid var(--border-strong); width: 100%; background: var(--bg-input); }
     .check { color: var(--success); font-weight: 600; }
     .key-preview { flex: 1; font-family: var(--font-mono); font-size: 13px; color: var(--fg); }
-    .key-help { font-family: var(--font-sans); font-size: 13px; line-height: 1.55; color: #cbd5e1; margin-top: 0.75rem; text-transform: none; letter-spacing: 0; }
+    .key-help { font-family: var(--font-sans); font-size: 13px; line-height: 1.55; color: var(--fg-soft); margin-top: 0.75rem; text-transform: none; letter-spacing: 0; }
     .key-help a { color: var(--cta); text-decoration: underline; text-underline-offset: 2px; }
     .key-help a:hover { color: var(--accent); }
     .key-help strong { color: var(--fg); font-weight: 600; }
@@ -944,7 +974,7 @@
       border-radius: 4px;
       font-family: var(--font-mono);
       font-size: 11px;
-      color: #cbd5e1;
+      color: var(--fg-soft);
     }
     .pb-status.error {
       background: rgba(239, 68, 68, 0.08);
@@ -1446,6 +1476,11 @@
         <a class="topnav-phone" href="tel:18452109672" aria-label="Call us at 1 (845) 210-9672">+1 (845) 210-9672</a>
         <a class="topnav-cta" href="https://automateanything.ai/contact/">Get Started</a>
       </div>
+
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle light/dark theme" title="Toggle theme">
+        <svg id="theme-icon-moon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+        <svg id="theme-icon-sun" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="hidden"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      </button>
 
       <button class="topnav-hamburger" id="topnav-hamburger" type="button" aria-label="Open menu">
         <span></span><span></span><span></span>
@@ -2171,6 +2206,7 @@
     const LANG_STORAGE = 'audio_language';
     const KEYTERMS_STORAGE = 'keyterms';
     const HISTORY_STORAGE = 'transcript_history';
+    const THEME_STORAGE = 'theme';
     const HISTORY_MAX = 10;
     const SERVER_URL_STORAGE = 'custom_server_url';
     const PAIRING_STORAGE = 'pairing_in_progress';
@@ -2895,6 +2931,21 @@
         container.appendChild(item);
       }
     }
+    // ============================================================================
+    // Theme toggle (light / dark)
+    // ============================================================================
+    function applyTheme(theme) {
+      const isLight = theme === 'light';
+      document.documentElement.dataset.theme = isLight ? 'light' : 'dark';
+      $('theme-icon-moon').classList.toggle('hidden', isLight);
+      $('theme-icon-sun').classList.toggle('hidden', !isLight);
+    }
+    $('theme-toggle').addEventListener('click', () => {
+      const next = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
+      applyTheme(next);
+      try { localStorage.setItem(THEME_STORAGE, next); } catch {}
+    });
+
     $('history-clear').addEventListener('click', () => {
       if (confirm('Clear all saved transcripts? This cannot be undone.')) {
         try { localStorage.removeItem(HISTORY_STORAGE); } catch {}
@@ -4037,6 +4088,10 @@
 
     renderServerBadge();
     renderHistory();
+    try {
+      const savedTheme = localStorage.getItem(THEME_STORAGE);
+      applyTheme(savedTheme === 'light' ? 'light' : 'dark');
+    } catch { applyTheme('dark'); }
     render();
   })();
   </script>
