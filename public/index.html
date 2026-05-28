@@ -102,6 +102,10 @@
       justify-content: space-between;
       padding: 0.6rem 1rem;
       gap: 1rem;
+      /* Position + high z-index inside topnav so the hamburger stays
+         visible (and tappable) on top of the open mobile menu. */
+      position: relative;
+      z-index: 60;
     }
     @media (min-width: 768px) { .topnav-inner { padding: 0.75rem 1.5rem; } }
     @media (min-width: 1024px) { .topnav-inner { padding: 0.85rem 2rem; } }
@@ -356,6 +360,32 @@
     }
     .topnav-mobile .topnav-cta-mobile:hover { background: var(--aa-accent); }
 
+    /* Explicit close button inside the mobile menu (top-right corner)
+       — defense in depth in case the hamburger is hidden/obscured. */
+    .topnav-mobile-close {
+      position: absolute;
+      top: 0.8rem; right: 1rem;
+      width: 40px; height: 40px;
+      background: rgba(75, 108, 140, 0.1);
+      border: 1px solid rgba(75, 108, 140, 0.25);
+      border-radius: 8px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      transition: background 0.2s, border-color 0.2s;
+    }
+    .topnav-mobile-close:hover { background: rgba(75, 108, 140, 0.2); border-color: var(--aa-accent); }
+    .topnav-mobile-close span {
+      position: absolute;
+      width: 18px; height: 2px;
+      background: var(--aa-text-strong);
+      border-radius: 1px;
+    }
+    .topnav-mobile-close span:nth-child(1) { transform: rotate(45deg); }
+    .topnav-mobile-close span:nth-child(2) { transform: rotate(-45deg); }
+
+    /* Lock body scroll when mobile menu is open */
+    body.menu-locked { overflow: hidden; }
+
     /* Push main content below the fixed nav */
     main { padding-top: 4.5rem !important; }
     @media (min-width: 768px) { main { padding-top: 5rem !important; } }
@@ -370,11 +400,12 @@
 
     header { display: flex; align-items: baseline; justify-content: space-between; border-bottom: 1px solid var(--ink); padding-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap; }
 
-    .hero { padding: 0.5rem 0 1.25rem; }
+    .hero { padding: 0.25rem 0 1rem; }
     @media (min-width: 768px) { .hero { padding: 0.75rem 0 1.5rem; } }
-    .hero h1 { font-family: var(--font-serif); font-weight: 400; font-size: 2.75rem; line-height: 1; letter-spacing: -0.02em; }
+    .hero h1 { font-family: var(--font-serif); font-weight: 400; font-size: 2.25rem; line-height: 1; letter-spacing: -0.02em; }
+    @media (min-width: 480px) { .hero h1 { font-size: 2.75rem; } }
     @media (min-width: 768px) { .hero h1 { font-size: 4.5rem; } }
-    .hero p { font-family: var(--font-sans); color: var(--smoke); font-size: 0.95rem; line-height: 1.45; margin-top: 0.6rem; max-width: 36rem; }
+    .hero p { font-family: var(--font-sans); color: var(--smoke); font-size: 0.9rem; line-height: 1.45; margin-top: 0.5rem; max-width: 36rem; }
     @media (min-width: 768px) { .hero p { font-size: 1.05rem; margin-top: 0.75rem; } }
 
     .panel { border: 1px solid var(--border); background: var(--bg-card); border-radius: 8px; }
@@ -717,6 +748,9 @@
     </div>
 
     <div class="topnav-mobile">
+      <button class="topnav-mobile-close" id="topnav-mobile-close" type="button" aria-label="Close menu">
+        <span></span><span></span>
+      </button>
       <details>
         <summary>Solutions</summary>
         <div class="topnav-mobile-section">
@@ -764,7 +798,7 @@
     <div class="container">
       <section class="hero">
         <h1>Transcribe.</h1>
-        <p>Any file, any size, any format. Choose a quick path for small files, or set up your own private server for large ones.</p>
+        <p>Audio to text. Any file, any size. Quick path for small files, your own private server for large ones.</p>
       </section>
 
       <!-- Server status badge -->
@@ -1022,29 +1056,55 @@
     // ============================================================================
     const topnav = document.getElementById('topnav');
     const hamburger = document.getElementById('topnav-hamburger');
+    const mobileClose = document.getElementById('topnav-mobile-close');
+
+    function setMenuOpen(open) {
+      if (!topnav) return;
+      topnav.classList.toggle('open', open);
+      document.body.classList.toggle('menu-locked', open);
+      if (!open) {
+        // Also close any expanded mobile <details> so it doesn't re-open silently next time
+        document.querySelectorAll('.topnav-mobile details[open]').forEach(d => d.removeAttribute('open'));
+      }
+    }
+
     if (hamburger && topnav) {
       hamburger.addEventListener('click', (e) => {
         e.stopPropagation();
-        topnav.classList.toggle('open');
+        setMenuOpen(!topnav.classList.contains('open'));
       });
     }
+    if (mobileClose) {
+      mobileClose.addEventListener('click', (e) => {
+        e.stopPropagation();
+        setMenuOpen(false);
+      });
+    }
+    // Close when any link in the mobile menu is tapped (so navigation feels normal)
+    document.querySelectorAll('.topnav-mobile a').forEach(link => {
+      link.addEventListener('click', () => setMenuOpen(false));
+    });
+    // ESC closes the mobile menu
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && topnav && topnav.classList.contains('open')) {
+        setMenuOpen(false);
+      }
+    });
     document.querySelectorAll('[data-dropdown]').forEach((item) => {
       const trigger = item.querySelector('.topnav-link');
       if (!trigger) return;
       trigger.addEventListener('click', (e) => {
         e.stopPropagation();
         const wasOpen = item.classList.contains('open');
-        // Close other dropdowns
         document.querySelectorAll('[data-dropdown].open').forEach((other) => {
           if (other !== item) other.classList.remove('open');
         });
         item.classList.toggle('open', !wasOpen);
       });
     });
-    // Click outside closes all dropdowns and mobile menu
+    // Click outside closes desktop dropdowns (mobile menu has its own close UX)
     document.addEventListener('click', (e) => {
       if (topnav && !topnav.contains(e.target)) {
-        topnav.classList.remove('open');
         document.querySelectorAll('[data-dropdown].open').forEach(d => d.classList.remove('open'));
       }
     });
