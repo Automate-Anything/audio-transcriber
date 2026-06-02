@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>API &amp; MCP — Transcribe by Automate Anything</title>
+<meta name="description" content="Drive the transcription engine from your own code or connect it to Claude over MCP. Bring your own provider key.">
+<style>
+  :root {
+    --bg: #121b2c; --bg-card: #1a2438; --bg-input: #0a1322;
+    --fg: #ffffff; --fg-muted: #94a3b8; --fg-soft: #cbd5e1;
+    --accent: #4b6c8c; --cta: #006cbe; --error: #ef4444; --ok: #22c55e;
+    --border: #24314a; --border-strong: #33425f;
+    --mono: 'SF Mono', 'JetBrains Mono', 'Fira Code', ui-monospace, 'Cascadia Code', Menlo, Consolas, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; scroll-padding-top: 2rem; }
+  body {
+    background: var(--bg); color: var(--fg-soft); font-family: var(--sans);
+    line-height: 1.65; font-size: 15px;
+    background-image:
+      radial-gradient(900px 500px at 85% -5%, rgba(0,108,190,0.10), transparent 60%),
+      radial-gradient(700px 500px at -5% 10%, rgba(75,108,140,0.08), transparent 55%);
+    background-attachment: fixed;
+  }
+  a { color: #4aa3ff; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .layout { display: grid; grid-template-columns: 250px 1fr; max-width: 1180px; margin: 0 auto; gap: 2.5rem; padding: 0 1.5rem; }
+
+  /* Sidebar */
+  aside {
+    position: sticky; top: 0; align-self: start; height: 100vh; overflow-y: auto;
+    padding: 2.2rem 0 2rem; border-right: 1px solid var(--border);
+  }
+  .brand { display: flex; align-items: center; gap: 0.6rem; margin-bottom: 0.4rem; }
+  .brand-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--cta); box-shadow: 0 0 14px rgba(0,108,190,0.8); }
+  .brand-name { font-weight: 700; color: var(--fg); font-size: 15px; letter-spacing: -0.01em; }
+  .brand-sub { font-size: 12px; color: var(--fg-muted); margin-bottom: 1.8rem; padding-left: 1.3rem; }
+  nav.toc a { display: block; color: var(--fg-muted); font-size: 13.5px; padding: 0.32rem 0; border-left: 2px solid transparent; padding-left: 0.9rem; transition: color .15s, border-color .15s; }
+  nav.toc a:hover { color: var(--fg); text-decoration: none; }
+  nav.toc a.section { color: var(--fg-soft); font-weight: 600; margin-top: 1.1rem; text-transform: uppercase; font-size: 11px; letter-spacing: 0.08em; border: none; padding-left: 0.9rem; }
+  nav.toc a.active { color: #4aa3ff; border-left-color: var(--cta); }
+
+  /* Main */
+  main { padding: 2.4rem 0 6rem; min-width: 0; }
+  .hero { margin-bottom: 2.5rem; opacity: 0; animation: rise .6s ease forwards; }
+  h1 { font-size: 2.1rem; color: var(--fg); letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 0.7rem; }
+  .lede { font-size: 1.05rem; color: var(--fg-muted); max-width: 60ch; }
+  .pill-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 1.2rem; }
+  .pill { font-size: 12px; padding: 0.3rem 0.7rem; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--bg-card); color: var(--fg-soft); }
+
+  section { margin-bottom: 3.2rem; opacity: 0; animation: rise .6s ease forwards; }
+  section:nth-of-type(1){animation-delay:.05s} section:nth-of-type(2){animation-delay:.1s}
+  section:nth-of-type(3){animation-delay:.15s} section:nth-of-type(4){animation-delay:.2s}
+  @keyframes rise { to { opacity: 1; transform: translateY(0); } from { opacity: 0; transform: translateY(10px); } }
+
+  h2 { font-size: 1.5rem; color: var(--fg); letter-spacing: -0.015em; margin-bottom: 0.5rem; padding-top: 0.5rem; }
+  h3 { font-size: 1.08rem; color: var(--fg); margin: 1.8rem 0 0.6rem; }
+  p { margin-bottom: 0.9rem; }
+  .section-intro { color: var(--fg-muted); margin-bottom: 1.4rem; }
+  ul { margin: 0 0 1rem 1.2rem; } li { margin-bottom: 0.35rem; }
+  strong { color: var(--fg); font-weight: 600; }
+  code { font-family: var(--mono); font-size: 0.86em; background: var(--bg-input); padding: 0.12em 0.42em; border-radius: 5px; color: #9fd0ff; border: 1px solid var(--border); }
+
+  /* Endpoint header */
+  .endpoint { display: flex; align-items: center; gap: 0.7rem; margin: 1.8rem 0 0.5rem; flex-wrap: wrap; }
+  .method { font-family: var(--mono); font-size: 12px; font-weight: 700; padding: 0.22rem 0.55rem; border-radius: 5px; letter-spacing: 0.03em; }
+  .method.post { background: rgba(0,108,190,0.18); color: #6cb6ff; border: 1px solid rgba(0,108,190,0.4); }
+  .method.get { background: rgba(34,197,94,0.15); color: #5bd98a; border: 1px solid rgba(34,197,94,0.35); }
+  .method.put { background: rgba(245,158,11,0.15); color: #fbbf24; border: 1px solid rgba(245,158,11,0.35); }
+  .endpoint .path { font-family: var(--mono); font-size: 0.95rem; color: var(--fg); }
+
+  /* Code blocks */
+  .code { position: relative; background: var(--bg-input); border: 1px solid var(--border); border-radius: 10px; margin: 0.8rem 0 1.2rem; overflow: hidden; }
+  .code-head { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0.9rem; border-bottom: 1px solid var(--border); background: rgba(255,255,255,0.015); }
+  .code-lang { font-family: var(--mono); font-size: 11px; color: var(--fg-muted); text-transform: uppercase; letter-spacing: 0.07em; }
+  .copy-btn { font-family: var(--sans); font-size: 12px; color: var(--fg-muted); background: transparent; border: 1px solid var(--border-strong); border-radius: 6px; padding: 0.25rem 0.6rem; cursor: pointer; transition: all .15s; }
+  .copy-btn:hover { color: var(--fg); border-color: var(--cta); }
+  .copy-btn.copied { color: var(--ok); border-color: var(--ok); }
+  pre { padding: 1rem 1.1rem; overflow-x: auto; }
+  pre code { background: none; border: none; padding: 0; color: #c8d6ea; font-size: 12.5px; line-height: 1.6; white-space: pre; }
+  .tok-key { color: #6cb6ff; } .tok-str { color: #9ae6b4; } .tok-com { color: #5b6b85; font-style: italic; } .tok-cmd { color: #fbbf24; }
+
+  /* Param table */
+  table { width: 100%; border-collapse: collapse; margin: 0.6rem 0 1.2rem; font-size: 13.5px; }
+  th, td { text-align: left; padding: 0.55rem 0.7rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+  th { color: var(--fg-muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+  td:first-child { font-family: var(--mono); color: #9fd0ff; white-space: nowrap; }
+  td .req { color: var(--error); font-size: 11px; margin-left: 0.3rem; }
+  td .opt { color: var(--fg-muted); font-size: 11px; margin-left: 0.3rem; }
+
+  .callout { border: 1px solid var(--border-strong); background: var(--bg-card); border-radius: 10px; padding: 1rem 1.2rem; margin: 1.2rem 0; }
+  .callout.warn { border-color: rgba(245,158,11,0.4); background: rgba(245,158,11,0.06); }
+  .callout-title { color: var(--fg); font-weight: 600; margin-bottom: 0.3rem; font-size: 14px; }
+  .callout p:last-child { margin-bottom: 0; }
+
+  footer { border-top: 1px solid var(--border); padding-top: 1.5rem; margin-top: 2rem; color: var(--fg-muted); font-size: 13px; }
+
+  @media (max-width: 820px) {
+    .layout { grid-template-columns: 1fr; gap: 0; }
+    aside { position: static; height: auto; border-right: none; border-bottom: 1px solid var(--border); padding-bottom: 1.2rem; }
+    nav.toc { columns: 2; } nav.toc a.section { break-after: avoid; }
+    main { padding-top: 1.6rem; }
+    h1 { font-size: 1.7rem; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <aside>
+    <div class="brand"><span class="brand-dot"></span><span class="brand-name">Transcribe</span></div>
+    <div class="brand-sub">by Automate Anything</div>
+    <nav class="toc" id="toc">
+      <a class="section">Start</a>
+      <a href="#overview">Overview</a>
+      <a href="#auth">Authentication</a>
+      <a class="section">REST API</a>
+      <a href="#transcribe-url">Transcribe a URL</a>
+      <a href="#uploads">Upload a local file</a>
+      <a href="#poll">Get the result</a>
+      <a href="#postprocess">Summary / actions / translate</a>
+      <a href="#reattach">Reattach a job</a>
+      <a class="section">MCP</a>
+      <a href="#mcp-setup">Connect to Claude</a>
+      <a href="#mcp-tools">Tools</a>
+      <a class="section">Reference</a>
+      <a href="#notes">Notes &amp; limits</a>
+    </nav>
+  </aside>
+
+  <main>
+    <div class="hero">
+      <h1>Drive the transcription engine<br>from your code or from Claude.</h1>
+      <p class="lede">A privacy-first speech-to-text engine you can call over a plain REST API or connect to any MCP client. You bring your own provider key — so it stays free to use and your audio is never stored after a job completes.</p>
+      <div class="pill-row">
+        <span class="pill">Bring your own key</span>
+        <span class="pill">REST + MCP</span>
+        <span class="pill">Speaker diarization</span>
+        <span class="pill">Summaries &amp; translation</span>
+      </div>
+    </div>
+
+    <section id="overview">
+      <h2>Overview</h2>
+      <p class="section-intro">There are two providers behind one interface, and you choose per request:</p>
+      <ul>
+        <li><strong>Single speaker</strong> (<code>provider: openai</code>) — OpenAI Whisper. Best for dictation, voice notes, a single narrator.</li>
+        <li><strong>Multiple speakers</strong> (<code>provider: assemblyai</code>) — AssemblyAI with speaker labels (diarization). Best for meetings, interviews, calls.</li>
+      </ul>
+      <p>Transcription is <strong>asynchronous</strong>: you start a job and get a <code>jobId</code> back immediately, then poll until it's done. The same engine powers both the REST API and the MCP tools.</p>
+      <p><strong>Base URL</strong></p>
+      <div class="code" data-copy>
+        <div class="code-head"><span class="code-lang">https</span><button class="copy-btn">Copy</button></div>
+        <pre><code>https://audio-transcriber-ccy7.onrender.com</code></pre>
+      </div>
+    </section>
+
+    <section id="auth">
+      <h2>Authentication</h2>
+      <p class="section-intro">There are no accounts and no app-issued keys. You authenticate with <strong>your own provider key</strong>, which is also what pays for the work.</p>
+      <ul>
+        <li>An <strong>OpenAI key</strong> (<code>sk-…</code>) for single-speaker transcription and for summaries / action items / translation.</li>
+        <li>An <strong>AssemblyAI key</strong> for multi-speaker transcription.</li>
+      </ul>
+      <p>Over REST, pass it as a Bearer token. Over MCP, you set it once in the connector config as a header (see below). Keys are held only for the duration of a request and are never logged or stored.</p>
+      <div class="code" data-copy>
+        <div class="code-head"><span class="code-lang">header</span><button class="copy-btn">Copy</button></div>
+        <pre><code>Authorization: Bearer YOUR_PROVIDER_KEY</code></pre>
+      </div>
+    </section>
+
+    <section id="transcribe-url">
+      <h2>Transcribe a URL</h2>
+      <p class="section-intro">The simplest path: give us a public link to the audio or video and we fetch it.</p>
+      <div class="endpoint"><span class="method post">POST</span><span class="path">/api/transcribe-url</span></div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>audioUrl</td><td>string</td><td>Public https URL to the file.<span class="opt">one of audioUrl / uploadId</span></td></tr>
+        <tr><td>uploadId</td><td>string</td><td>ID from an upload slot (see below) instead of a URL.</td></tr>
+        <tr><td>provider</td><td>string</td><td><code>openai</code> (default) or <code>assemblyai</code>.</td></tr>
+        <tr><td>language</td><td>string</td><td>ISO code like <code>en</code>, <code>he</code>. Omit to auto-detect.<span class="opt">optional</span></td></tr>
+        <tr><td>keyterms</td><td>string</td><td>Comma-separated names / jargon to bias recognition.<span class="opt">optional</span></td></tr>
+        <tr><td>codeSwitching</td><td>boolean</td><td>Audio mixes languages. Best with <code>assemblyai</code>.<span class="opt">optional</span></td></tr>
+        <tr><td>languages</td><td>string</td><td>Comma-separated language names present (hint for code-switching).<span class="opt">optional</span></td></tr>
+      </table>
+      <div class="code" data-copy>
+        <div class="code-head"><span class="code-lang">curl</span><button class="copy-btn">Copy</button></div>
+<pre><code><span class="tok-cmd">curl</span> -X POST https://audio-transcriber-ccy7.onrender.com/api/transcribe-url \
+  -H <span class="tok-str">"Authorization: Bearer $ASSEMBLYAI_KEY"</span> \
+  -H <span class="tok-str">"Content-Type: application/json"</span> \
+  -d <span class="tok-str">'{
+    "audioUrl": "https://example.com/meeting.mp3",
+    "provider": "assemblyai"
+  }'</span>
+
+<span class="tok-com"># => { "jobId": "b8e0cf4c8f89..." }</span></code></pre>
+      </div>
+      <p>You can also send a multipart upload directly to <code>POST /api/transcribe</code> with a <code>file</code> field — that's what the web app uses.</p>
+    </section>
+
+    <section id="uploads">
+      <h2>Upload a local file</h2>
+      <p class="section-intro">No public URL? Create a one-time upload slot, PUT the bytes to it, then transcribe by <code>uploadId</code>. This is also how an agent uploads a local file (it can <code>curl -T</code> from its sandbox).</p>
+      <div class="endpoint"><span class="method post">POST</span><span class="path">/api/uploads</span></div>
+      <div class="code" data-copy>
+        <div class="code-head"><span class="code-lang">bash</span><button class="copy-btn">Copy</button></div>
+<pre><code><span class="tok-com"># 1. create a slot</span>
+<span class="tok-cmd">curl</span> -X POST .../api/uploads -H <span class="tok-str">"Content-Type: application/json"</span> \
+  -d <span class="tok-str">'{"fileName":"meeting.mp3"}'</span>
+<span class="tok-com"># => { "uploadId": "...", "uploadUrl": ".../api/uploads/..." }</span>
+
+<span class="tok-com"># 2. PUT the raw bytes to uploadUrl</span>
+<span class="tok-cmd">curl</span> -T meeting.mp3 <span class="tok-str">"$UPLOAD_URL"</span>
+
+<span class="tok-com"># 3. transcribe by uploadId</span>
+<span class="tok-cmd">curl</span> -X POST .../api/transcribe-url \
+  -H <span class="tok-str">"Authorization: Bearer $OPENAI_KEY"</span> \
+  -H <span class="tok-str">"Content-Type: application/json"</span> \
+  -d <span class="tok-str">'{"uploadId":"...","provider":"openai"}'</span></code></pre>
+      </div>
+      <p>Upload slots are single-use and expire after 30 minutes if unused.</p>
+    </section>
+
+    <section id="poll">
+      <h2>Get the result</h2>
+      <p class="section-intro">Poll the job until <code>status</code> is <code>done</code> or <code>error</code>.</p>
+      <div class="endpoint"><span class="method get">GET</span><span class="path">/api/jobs/:jobId</span></div>
+      <div class="code" data-copy>
+        <div class="code-head"><span class="code-lang">json</span><button class="copy-btn">Copy</button></div>
+<pre><code><span class="tok-com">// while processing</span>
+{ <span class="tok-key">"status"</span>: <span class="tok-str">"processing"</span>, <span class="tok-key">"progress"</span>: 0.62, <span class="tok-key">"message"</span>: <span class="tok-str">"Transcribing…"</span> }
+
+<span class="tok-com">// when done (multi-speaker includes utterances)</span>
+{
+  <span class="tok-key">"status"</span>: <span class="tok-str">"done"</span>,
+  <span class="tok-key">"transcript"</span>: <span class="tok-str">"Full text…"</span>,
+  <span class="tok-key">"utterances"</span>: [
+    { <span class="tok-key">"speaker"</span>: <span class="tok-str">"A"</span>, <span class="tok-key">"text"</span>: <span class="tok-str">"Hello."</span>, <span class="tok-key">"start_ms"</span>: 0, <span class="tok-key">"end_ms"</span>: 900 }
+  ],
+  <span class="tok-key">"durationSeconds"</span>: 612
+}</code></pre>
+      </div>
+    </section>
+
+    <section id="postprocess">
+      <h2>Summary / action items / translation</h2>
+      <p class="section-intro">Run AI post-processing on any transcript. Requires an OpenAI key.</p>
+      <div class="endpoint"><span class="method post">POST</span><span class="path">/api/post-process</span></div>
+      <table>
+        <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+        <tr><td>transcript</td><td>string</td><td>Text to process.<span class="req">required</span></td></tr>
+        <tr><td>tasks</td><td>string[]</td><td>Any of <code>summary</code>, <code>actions</code>, <code>translate</code>.<span class="req">required</span></td></tr>
+        <tr><td>targetLanguage</td><td>string</td><td>For <code>translate</code>, e.g. <code>English</code>, <code>Hebrew</code>.<span class="opt">optional</span></td></tr>
+        <tr><td>model</td><td>string</td><td><code>gpt-4o-mini</code> (default), <code>gpt-4o</code>, or <code>gpt-4.1</code>.<span class="opt">optional</span></td></tr>
+      </table>
+      <div class="code" data-copy>
+        <div class="code-head"><span class="code-lang">curl</span><button class="copy-btn">Copy</button></div>
+<pre><code><span class="tok-cmd">curl</span> -X POST .../api/post-process \
+  -H <span class="tok-str">"Authorization: Bearer $OPENAI_KEY"</span> \
+  -H <span class="tok-str">"Content-Type: application/json"</span> \
+  -d <span class="tok-str">'{
+    "transcript": "…",
+    "tasks": ["summary", "actions"]
+  }'</span>
+<span class="tok-com"># => { "summary": "…", "actionItems": ["…"] }</span></code></pre>
+      </div>
+    </section>
+
+    <section id="reattach">
+      <h2>Reattach a job</h2>
+      <p class="section-intro">Multi-speaker work runs on AssemblyAI's servers, so it survives a restart of ours. If you kept the <code>assemblyTranscriptId</code> from a job's status, you can resume it on a fresh server with your AssemblyAI key.</p>
+      <div class="endpoint"><span class="method post">POST</span><span class="path">/api/assembly/reattach</span></div>
+      <div class="code" data-copy>
+        <div class="code-head"><span class="code-lang">curl</span><button class="copy-btn">Copy</button></div>
+<pre><code><span class="tok-cmd">curl</span> -X POST .../api/assembly/reattach \
+  -H <span class="tok-str">"Authorization: Bearer $ASSEMBLYAI_KEY"</span> \
+  -H <span class="tok-str">"Content-Type: application/json"</span> \
+  -d <span class="tok-str">'{"transcriptId":"…"}'</span>
+<span class="tok-com"># => { "jobId": "…" }  then poll /api/jobs/:jobId as usual</span></code></pre>
+      </div>
+    </section>
+
+    <section id="mcp-setup">
+      <h2>Connect to Claude (MCP)</h2>
+      <p class="section-intro">The same engine is exposed as an MCP server, so Claude (or Cursor, or any MCP client) can transcribe and summarize through one connector.</p>
+      <p><strong>Connector URL</strong></p>
+      <div class="code" data-copy>
+        <div class="code-head"><span class="code-lang">https</span><button class="copy-btn">Copy</button></div>
+        <pre><code>https://audio-transcriber-ccy7.onrender.com/mcp</code></pre>
+      </div>
+      <p><strong>Headers</strong> — add your provider key(s) in the connector's custom-header settings. The model never sees them.</p>
+      <div class="code" data-copy>
+        <div class="code-head"><span class="code-lang">headers</span><button class="copy-btn">Copy</button></div>
+<pre><code>X-OpenAI-Key:      sk-…        <span class="tok-com"># single-speaker + summaries</span>
+X-AssemblyAI-Key:  …           <span class="tok-com"># multi-speaker (diarization)</span></code></pre>
+      </div>
+      <div class="callout">
+        <div class="callout-title">In Claude</div>
+        <p>Settings → Connectors → Add custom connector → paste the URL above, then add the header(s) for whichever provider(s) you'll use. Add only the key for the mode you need.</p>
+      </div>
+    </section>
+
+    <section id="mcp-tools">
+      <h2>MCP tools</h2>
+      <table>
+        <tr><th>Tool</th><th>What it does</th></tr>
+        <tr><td>create_upload</td><td>Get an upload URL for a <strong>local</strong> file. PUT the bytes, then pass the returned <code>uploadId</code> to start_transcription. Skip if you have a public URL.</td></tr>
+        <tr><td>start_transcription</td><td>Start a job from <code>audioUrl</code> or <code>uploadId</code>. Choose <code>mode</code>: <code>single_speaker</code> or <code>multi_speaker</code>. Returns a <code>jobId</code>.</td></tr>
+        <tr><td>get_transcription</td><td>Fetch a job by <code>jobId</code>. Waits briefly, then returns the transcript (speaker-labeled when available) or asks you to poll again.</td></tr>
+        <tr><td>post_process</td><td>Summary, action items, and/or translation for a transcript.</td></tr>
+      </table>
+      <p>A typical agent flow: <code>start_transcription({ audioUrl, mode: "multi_speaker" })</code> → <code>get_transcription({ jobId })</code> (repeat until done) → <code>post_process({ transcript, tasks: ["summary","actions"] })</code>.</p>
+    </section>
+
+    <section id="notes">
+      <h2>Notes &amp; limits</h2>
+      <ul>
+        <li><strong>Free to use</strong> — you pay your provider directly for usage; there's no charge from us.</li>
+        <li><strong>Privacy</strong> — audio is processed for the job and the working files are deleted afterward; nothing is retained.</li>
+        <li><strong>Async</strong> — always poll <code>/api/jobs/:id</code> (or call <code>get_transcription</code> again). Long files can take several minutes.</li>
+        <li><strong>Code-switching</strong> — for audio that mixes languages, use multi-speaker with <code>codeSwitching</code> on; English-plus-one works best. Test a sample first for less common pairs.</li>
+        <li><strong>CORS</strong> — the API is callable cross-origin, so browser and server clients both work.</li>
+      </ul>
+      <div class="callout warn">
+        <div class="callout-title">Provider keys are real credentials</div>
+        <p>Whoever holds a key can spend on that provider account. Use a dedicated key with usage limits if you're wiring this into something shared.</p>
+      </div>
+    </section>
+
+    <footer>
+      Transcribe — by Automate Anything AI. &nbsp;·&nbsp; <a href="/">Open the app →</a>
+    </footer>
+  </main>
+</div>
+
+<script>
+  // Copy buttons
+  document.querySelectorAll('.code[data-copy]').forEach(block => {
+    const btn = block.querySelector('.copy-btn');
+    const code = block.querySelector('pre code');
+    if (!btn || !code) return;
+    btn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(code.innerText);
+        btn.textContent = 'Copied'; btn.classList.add('copied');
+        setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 1600);
+      } catch { btn.textContent = 'Press ⌘C'; }
+    });
+  });
+
+  // Scroll-spy for the sidebar
+  const links = [...document.querySelectorAll('nav.toc a[href^="#"]')];
+  const map = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const a = map.get(e.target.id); if (a) a.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-10% 0px -75% 0px' });
+  document.querySelectorAll('main section[id]').forEach(s => obs.observe(s));
+</script>
+</body>
+</html>

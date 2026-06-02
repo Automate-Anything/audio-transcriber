@@ -208,6 +208,80 @@ const upload = multer({
 
 const jobs = new Map();
 
+// Upload slots for the "presigned upload" pattern used by API/MCP callers who
+// have a local file (no public URL). Flow: POST /api/uploads -> { uploadId,
+// uploadUrl }; PUT the bytes to uploadUrl; then transcribe referencing the
+// uploadId. Each slot is just a temp-file holder — no persistent storage.
+const uploads = new Map(); // uploadId -> { path, ready, size, name, createdAt }
+const UPLOAD_TTL_MS = 30 * 60 * 1000;
+
+function publicBaseUrl(req) {
+  // Honor proxy headers (Render/Cloudflare sit in front).
+  const proto = (req.headers['x-forwarded-proto'] || req.protocol || 'https').split(',')[0].trim();
+  const host = (req.headers['x-forwarded-host'] || req.headers['host'] || '').split(',')[0].trim();
+  return host ? `${proto}://${host}` : '';
+}
+
+// Create an upload slot. Returns a one-time URL to PUT the file bytes to.
+app.post('/api/uploads', transcribeLimiter, express.json({ limit: '2kb' }), (req, res) => {
+  if (shuttingDown) return res.status(503).json({ error: 'Server is updating — try again in a moment.' });
+  const uploadId = crypto.randomBytes(18).toString('hex');
+  const name = (req.body && req.body.fileName ? req.body.fileName.toString() : 'audio')
+    .replace(/[^\w.\-]/g, '_').slice(0, 100) || 'audio';
+  const tmpPath = path.join(os.tmpdir(), 'up-' + uploadId + '-' + name);
+  uploads.set(uploadId, { path: tmpPath, ready: false, size: 0, name, createdAt: Date.now() });
+  const base = publicBaseUrl(req);
+  res.json({
+    uploadId,
+    uploadUrl: `${base}/api/uploads/${uploadId}`,
+    method: 'PUT',
+    expiresInSeconds: Math.floor(UPLOAD_TTL_MS / 1000),
+    note: 'PUT the raw file bytes to uploadUrl, then call transcribe with this uploadId.',
+  });
+});
+
+// Receive the bytes for a slot (raw body stream, size-capped).
+app.put('/api/uploads/:id', transcribeLimiter, (req, res) => {
+  const slot = uploads.get(req.params.id);
+  if (!slot) return res.status(404).json({ error: 'Unknown or expired uploadId.' });
+  if (slot.ready) return res.status(409).json({ error: 'This upload slot was already filled.' });
+
+  const out = fs.createWriteStream(slot.path);
+  let written = 0, aborted = false;
+  const fail = (status, msg) => {
+    aborted = true;
+    try { out.destroy(); } catch {}
+    try { fs.unlinkSync(slot.path); } catch {}
+    uploads.delete(req.params.id);
+    if (!res.headersSent) res.status(status).json({ error: msg });
+  };
+  req.on('data', (chunk) => {
+    if (aborted) return;
+    written += chunk.length;
+    if (written > MAX_FILE_SIZE) return fail(413, 'File exceeds the size limit.');
+  });
+  req.pipe(out);
+  out.on('error', () => fail(500, 'Failed to store upload.'));
+  req.on('error', () => fail(400, 'Upload stream error.'));
+  out.on('finish', () => {
+    if (aborted) return;
+    if (written === 0) return fail(400, 'Empty upload.');
+    slot.ready = true;
+    slot.size = written;
+    res.json({ uploadId: req.params.id, size: written, ready: true });
+  });
+});
+
+// Resolve an uploadId into a fileInfo for transcription (and consume the slot
+// so it can't be reused). Throws { status, message } if not usable.
+function consumeUpload(uploadId) {
+  const slot = uploads.get(uploadId);
+  if (!slot) { const e = new Error('Unknown or expired uploadId.'); e.status = 404; throw e; }
+  if (!slot.ready) { const e = new Error('Upload not finished — PUT the bytes first.'); e.status = 400; throw e; }
+  uploads.delete(uploadId);
+  return { path: slot.path, size: slot.size, originalname: slot.name };
+}
+
 app.get('/health', (req, res) => res.json({ ok: true }));
 
 // Graceful-shutdown flag. Flipped to true on SIGTERM so new submissions get a
@@ -363,9 +437,10 @@ app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
 });
 
 // ============================================================================
-// URL-based ingestion (for API / MCP callers): instead of multipart-uploading
-// bytes, the caller passes a URL to the audio/video and we fetch it server-
-// side. Same job pipeline afterward. JSON body + Bearer provider key.
+// URL / upload ingestion (for API / MCP callers): instead of multipart-
+// uploading bytes in one request, the caller either passes a URL we fetch, or
+// an uploadId from a prior /api/uploads slot. Same job pipeline afterward.
+// JSON body + Bearer provider key.
 // ============================================================================
 app.post('/api/transcribe-url', transcribeLimiter, express.json({ limit: '8kb' }), async (req, res) => {
   if (shuttingDown) return res.status(503).json({ error: 'Server is updating — try again in a moment.' });
@@ -374,13 +449,14 @@ app.post('/api/transcribe-url', transcribeLimiter, express.json({ limit: '8kb' }
   if (!apiKey) return res.status(401).json({ error: 'Missing API key (Bearer).' });
 
   const audioUrl = (req.body.audioUrl || req.body.url || '').toString().trim();
-  if (!audioUrl) return res.status(400).json({ error: 'Provide audioUrl.' });
+  const uploadId = (req.body.uploadId || '').toString().trim();
+  if (!audioUrl && !uploadId) return res.status(400).json({ error: 'Provide audioUrl or uploadId.' });
 
   let fileInfo;
   try {
-    fileInfo = await fetchAudioToTemp(audioUrl);
+    fileInfo = uploadId ? consumeUpload(uploadId) : await fetchAudioToTemp(audioUrl);
   } catch (e) {
-    return res.status(400).json({ error: e.message || 'Could not fetch the audio URL.' });
+    return res.status(e.status || 400).json({ error: e.message || 'Could not obtain the audio.' });
   }
   return dispatchTranscription(res, fileInfo, apiKey, parseTranscribeOptions(req.body));
 });
@@ -905,6 +981,14 @@ setInterval(() => {
       jobs.delete(id);
     }
   }
+  // Expire unused upload slots (filled-but-never-transcribed, or abandoned).
+  const upCutoff = Date.now() - UPLOAD_TTL_MS;
+  for (const [id, slot] of uploads) {
+    if (slot.createdAt < upCutoff) {
+      try { if (fs.existsSync(slot.path)) fs.unlinkSync(slot.path); } catch {}
+      uploads.delete(id);
+    }
+  }
 }, 10 * 60 * 1000);
 
 function cleanupJob(job) {
@@ -1347,6 +1431,15 @@ async function registerSelf() {
 mountMcp(app, express, {
   createTranscriptionJob,
   fetchAudioToTemp,
+  consumeUpload,
+  publicBaseUrl,
+  createUploadSlot: (fileName) => {
+    const uploadId = crypto.randomBytes(18).toString('hex');
+    const name = (fileName || 'audio').toString().replace(/[^\w.\-]/g, '_').slice(0, 100) || 'audio';
+    const tmpPath = path.join(os.tmpdir(), 'up-' + uploadId + '-' + name);
+    uploads.set(uploadId, { path: tmpPath, ready: false, size: 0, name, createdAt: Date.now() });
+    return uploadId;
+  },
   jobs,
   serializeJob,
   runPostProcess,

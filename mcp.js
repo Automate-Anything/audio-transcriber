@@ -18,24 +18,49 @@ const { z } = require('zod');
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // Build a per-request MCP server whose tools close over this caller's keys.
-function buildServer(keys, deps) {
-  const { createTranscriptionJob, fetchAudioToTemp, jobs, serializeJob, runPostProcess } = deps;
+function buildServer(keys, deps, ctx) {
+  const { createTranscriptionJob, fetchAudioToTemp, consumeUpload, createUploadSlot, jobs, serializeJob, runPostProcess } = deps;
+  const baseUrl = (ctx && ctx.baseUrl) || '';
   const server = new McpServer({ name: 'transcribe', version: '1.0.0' });
 
   const asText = (obj) => ({ content: [{ type: 'text', text: typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2) }] });
   const asError = (msg) => ({ content: [{ type: 'text', text: 'Error: ' + msg }], isError: true });
 
+  // ---- create_upload -------------------------------------------------------
+  server.registerTool('create_upload', {
+    title: 'Create an upload slot for a local file',
+    description:
+      'Use this when the audio/video is a LOCAL file with no public URL. Returns an uploadUrl ' +
+      'and uploadId. Upload the file bytes with an HTTP PUT to uploadUrl (e.g. in a code sandbox: ' +
+      '`curl -T file.mp3 <uploadUrl>`), then call start_transcription with that uploadId instead ' +
+      'of audioUrl. If the file is already at a public URL, skip this and pass audioUrl directly.',
+    inputSchema: {
+      fileName: z.string().optional().describe('Original file name (used only for extension hints).'),
+    },
+  }, async (args) => {
+    if (!baseUrl) return asError('Server base URL unavailable; cannot create an upload slot.');
+    const uploadId = createUploadSlot(args.fileName || 'audio');
+    return asText({
+      uploadId,
+      uploadUrl: `${baseUrl}/api/uploads/${uploadId}`,
+      method: 'PUT',
+      next: 'PUT the raw file bytes to uploadUrl, then call start_transcription with this uploadId.',
+    });
+  });
+
   // ---- start_transcription ------------------------------------------------
   server.registerTool('start_transcription', {
     title: 'Start a transcription',
     description:
-      'Transcribe an audio or video file from a public URL. Returns a jobId immediately; ' +
-      'call get_transcription with that jobId to retrieve the result (transcription runs ' +
-      'asynchronously and can take from seconds to several minutes depending on length). ' +
-      'Use mode "multi_speaker" for conversations/meetings where you want speaker labels ' +
-      '(diarization); use "single_speaker" for one voice (dictation, a single narrator).',
+      'Transcribe an audio or video file. Provide either audioUrl (a public https URL) OR an ' +
+      'uploadId from create_upload (for local files). Returns a jobId immediately; call ' +
+      'get_transcription with that jobId to retrieve the result (transcription runs asynchronously ' +
+      'and can take from seconds to several minutes depending on length). Use mode "multi_speaker" ' +
+      'for conversations/meetings where you want speaker labels (diarization); use "single_speaker" ' +
+      'for one voice (dictation, a single narrator).',
     inputSchema: {
-      audioUrl: z.string().url().describe('Public https URL to the audio or video file.'),
+      audioUrl: z.string().url().optional().describe('Public https URL to the audio or video file.'),
+      uploadId: z.string().optional().describe('An uploadId from create_upload (use instead of audioUrl for local files).'),
       mode: z.enum(['single_speaker', 'multi_speaker']).default('single_speaker')
         .describe('single_speaker = OpenAI Whisper; multi_speaker = AssemblyAI with speaker labels.'),
       language: z.string().optional().describe('ISO code like "en" or "he". Omit to auto-detect.'),
@@ -54,11 +79,14 @@ function buildServer(keys, deps) {
         ' to use ' + args.mode + '.'
       );
     }
+    if (!args.audioUrl && !args.uploadId) {
+      return asError('Provide either audioUrl (a public URL) or uploadId (from create_upload).');
+    }
     let fileInfo;
     try {
-      fileInfo = await fetchAudioToTemp(args.audioUrl);
+      fileInfo = args.uploadId ? consumeUpload(args.uploadId) : await fetchAudioToTemp(args.audioUrl);
     } catch (e) {
-      return asError('Could not fetch the audio URL: ' + (e.message || e));
+      return asError('Could not obtain the audio: ' + (e.message || e));
     }
     try {
       const jobId = createTranscriptionJob(fileInfo, apiKey, {
@@ -163,7 +191,8 @@ function mountMcp(app, express, deps) {
       openai: (req.headers['x-openai-key'] || '').toString().trim(),
       assembly: (req.headers['x-assemblyai-key'] || '').toString().trim(),
     };
-    const server = buildServer(keys, deps);
+    const baseUrl = deps.publicBaseUrl ? deps.publicBaseUrl(req) : '';
+    const server = buildServer(keys, deps, { baseUrl });
     const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined });
     res.on('close', () => { try { transport.close(); } catch {} try { server.close(); } catch {} });
     try {
