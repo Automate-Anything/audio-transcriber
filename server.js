@@ -20,6 +20,7 @@ const crypto = require('crypto');
 const dns = require('dns').promises;
 const net = require('net');
 const OpenAI = require('openai');
+const { mountMcp } = require('./mcp.js');
 
 // ============================================================================
 // Config
@@ -398,24 +399,24 @@ function parseTranscribeOptions(body) {
   };
 }
 
-// Validate the key for the chosen provider, create the job, and dispatch it.
-// Shared by the multipart and URL ingestion endpoints. `fileInfo` is
-// { path, size, originalname }. Cleans up the temp file on validation failure.
-function dispatchTranscription(res, fileInfo, apiKey, opts) {
+// Validate the key for the chosen provider, create the job, and start it.
+// Returns the jobId. Throws { status, message } on validation failure and
+// cleans up the temp file. Used directly by the MCP tools and (via the thin
+// HTTP wrapper below) by the REST endpoints.
+function createTranscriptionJob(fileInfo, apiKey, opts) {
   const { provider, language, keyterms, codeSwitching, csLanguages } = opts;
-  const cleanup = () => { try { fs.unlinkSync(fileInfo.path); } catch {} };
+  const fail = (status, message) => {
+    try { fs.unlinkSync(fileInfo.path); } catch {}
+    const e = new Error(message); e.status = status; throw e;
+  };
 
   if (provider === 'assemblyai') {
-    if (apiKey.length < 20) {
-      cleanup();
-      return res.status(401).json({ error: "That key doesn't look right for AssemblyAI." });
-    }
-    return startAssemblyJob(res, fileInfo, apiKey, language, keyterms, codeSwitching, csLanguages);
+    if (!apiKey || apiKey.length < 20) fail(401, "That key doesn't look right for AssemblyAI.");
+    return startAssemblyJob(fileInfo, apiKey, language, keyterms, codeSwitching, csLanguages);
   }
 
-  if (!apiKey.startsWith('sk-') || apiKey.length < 20) {
-    cleanup();
-    return res.status(401).json({ error: "That key doesn't look right. OpenAI keys start with sk-" });
+  if (!apiKey || !apiKey.startsWith('sk-') || apiKey.length < 20) {
+    fail(401, "That key doesn't look right. OpenAI keys start with sk-");
   }
 
   const jobId = crypto.randomBytes(12).toString('hex');
@@ -452,7 +453,17 @@ function dispatchTranscription(res, fileInfo, apiKey, opts) {
     job.error  = err.message || String(err);
   });
 
-  res.json({ jobId });
+  return jobId;
+}
+
+// Thin HTTP wrapper around createTranscriptionJob for the REST endpoints.
+function dispatchTranscription(res, fileInfo, apiKey, opts) {
+  try {
+    const jobId = createTranscriptionJob(fileInfo, apiKey, opts);
+    res.json({ jobId });
+  } catch (e) {
+    res.status(e.status || 500).json({ error: e.message || 'Could not start transcription.' });
+  }
 }
 
 // ============================================================================
@@ -461,7 +472,7 @@ function dispatchTranscription(res, fileInfo, apiKey, opts) {
 // Flow: upload bytes -> submit transcript with speaker_labels -> poll until done.
 // ============================================================================
 
-function startAssemblyJob(res, fileInfo, apiKey, language, keyterms, codeSwitching, csLanguages) {
+function startAssemblyJob(fileInfo, apiKey, language, keyterms, codeSwitching, csLanguages) {
   const jobId = crypto.randomBytes(12).toString('hex');
   const job = {
     id: jobId,
@@ -497,7 +508,7 @@ function startAssemblyJob(res, fileInfo, apiKey, language, keyterms, codeSwitchi
     job.error  = sanitizeAssemblyError(err);
   });
 
-  res.json({ jobId });
+  return jobId;
 }
 
 async function processAssemblyJob(job) {
@@ -676,10 +687,8 @@ function sanitizeAssemblyError(err) {
   return msg.length > 200 ? msg.slice(0, 200) + '…' : msg;
 }
 
-app.get('/api/jobs/:id', jobsLimiter, (req, res) => {
-  const job = jobs.get(req.params.id);
-  if (!job) return res.status(404).json({ error: 'Job not found.' });
-  res.json({
+function serializeJob(job) {
+  return {
     id: job.id,
     provider: job.provider || 'openai',
     status: job.status,
@@ -699,7 +708,13 @@ app.get('/api/jobs/:id', jobsLimiter, (req, res) => {
     fileSize: job.fileSize,
     originalName: job.originalName,
     pathTaken: job.pathTaken,
-  });
+  };
+}
+
+app.get('/api/jobs/:id', jobsLimiter, (req, res) => {
+  const job = jobs.get(req.params.id);
+  if (!job) return res.status(404).json({ error: 'Job not found.' });
+  res.json(serializeJob(job));
 });
 
 // ============================================================================
@@ -770,106 +785,111 @@ app.post('/api/assembly/reattach', transcribeLimiter, express.json({ limit: '64k
 // Uses the user's OpenAI key (Bearer header). Transcript is sent in the
 // request body — larger json limit applied to this route only.
 // ============================================================================
+const POST_PROCESS_MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1'];
+
+// Core summary / action-items / translation logic. Returns a result object.
+// Throws Error on failure. Shared by the REST route and the MCP tool.
+async function runPostProcess(apiKey, { transcript, tasks, targetLanguage, model }) {
+  const text = (transcript || '').toString().trim().slice(0, 400000);
+  tasks = Array.isArray(tasks) ? tasks : [];
+  targetLanguage = (targetLanguage || '').toString().trim().slice(0, 40);
+  model = POST_PROCESS_MODELS.includes(model) ? model : 'gpt-4o-mini';
+  if (!text) { const e = new Error('No transcript provided.'); e.status = 400; throw e; }
+  if (!tasks.length) { const e = new Error('No tasks requested.'); e.status = 400; throw e; }
+
+  const client = new OpenAI({ apiKey });
+  const result = {};
+  const wantSummary = tasks.includes('summary');
+  const wantActions = tasks.includes('actions');
+
+  if (wantSummary || wantActions) {
+    const fields = [];
+    if (wantSummary) fields.push(
+      '"summary": a thorough summary written as 2-4 short paragraphs (not bullet points). ' +
+      'Open with one sentence stating what the conversation was and who was involved, then cover the ' +
+      'main topics discussed, any decisions or conclusions reached, points of disagreement or open ' +
+      'questions, and notable details, context, numbers, names, or examples that came up. Be specific ' +
+      'and substantive — capture the actual content, not vague generalities. Aim for real depth while ' +
+      'staying readable.'
+    );
+    if (wantActions) fields.push(
+      '"actionItems": an array of the concrete next steps from this conversation. Apply these rules ' +
+      'consistently so the same transcript always yields the same list:\n' +
+      '  • INCLUDE a step only if someone explicitly committed to it, was asked/assigned to do it, or the ' +
+      'group clearly agreed it should happen. Look for language like "I\'ll...", "we need to...", "can you...", ' +
+      '"let\'s...", "the next step is...", "by [date]".\n' +
+      '  • EXCLUDE general discussion, opinions, background, ideas mentioned in passing, and things that were ' +
+      'considered but not agreed. If it was only talked about, it is NOT an action item.\n' +
+      '  • Write each item as one short imperative sentence starting with a verb, self-contained. Include the ' +
+      'responsible person and any deadline when the transcript states them. Do not invent or infer tasks that ' +
+      'were not actually raised. Merge duplicates. Order them by the order they came up.\n' +
+      '  • If there are genuinely no committed next steps, return an empty array — do not pad the list.'
+    );
+    const sys = 'You are a precise meeting/transcript analyst. You read carefully and capture specifics — ' +
+      'names, numbers, decisions, and concrete next steps — rather than generic summaries. Respond with a ' +
+      'single JSON object and nothing else.';
+    const prompt =
+      `Analyze the transcript below and produce a JSON object with these fields:\n` +
+      fields.map(f => '- ' + f).join('\n') +
+      `\n\nReturn only valid JSON. Transcript:\n"""\n${text}\n"""`;
+    const completion = await client.chat.completions.create({
+      model,
+      messages: [{ role: 'system', content: sys }, { role: 'user', content: prompt }],
+      response_format: { type: 'json_object' },
+      max_tokens: 2000,
+      temperature: 0,
+      seed: 1234,
+    });
+    let parsed = {};
+    try { parsed = JSON.parse(completion.choices[0].message.content); } catch {}
+    if (wantSummary) result.summary = (parsed.summary || '').toString().trim();
+    if (wantActions) result.actionItems = Array.isArray(parsed.actionItems)
+      ? parsed.actionItems.map(s => s.toString().trim()).filter(Boolean) : [];
+  }
+
+  if (tasks.includes('translate')) {
+    const lang = targetLanguage || 'English';
+    const completion = await client.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content: `You are a translator. Translate the user's transcript into ${lang}. Preserve speaker labels and line breaks. Output only the translation, no preamble.` },
+        { role: 'user', content: text },
+      ],
+      max_tokens: 8000,
+      temperature: 0,
+      seed: 1234,
+    });
+    result.translation = (completion.choices[0].message.content || '').trim();
+    result.translationLanguage = lang;
+  }
+
+  return result;
+}
+
+function sanitizeOpenAiError(e) {
+  const msg = (e && (e.message || (e.error && e.error.message))) || 'Post-processing failed.';
+  if (/api key/i.test(msg) || /invalid_api_key/i.test(msg)) return 'OpenAI rejected the key.';
+  if (/quota/i.test(msg) || /insufficient/i.test(msg)) return 'Your OpenAI account is out of quota for this request.';
+  if (/rate limit/i.test(msg)) return 'OpenAI rate limit hit — wait a moment and retry.';
+  return msg;
+}
+
 app.post('/api/post-process', postProcessLimiter, express.json({ limit: '4mb' }), async (req, res) => {
   const auth = req.headers.authorization || '';
   const apiKey = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
   if (!apiKey.startsWith('sk-') || apiKey.length < 20) {
     return res.status(401).json({ error: 'A valid OpenAI key is required for summary, action items, and translation.' });
   }
-  const transcript = (req.body.transcript || '').toString().trim();
-  const tasks = Array.isArray(req.body.tasks) ? req.body.tasks : [];
-  const targetLanguage = (req.body.targetLanguage || '').toString().trim().slice(0, 40);
-  // Model choice — allowlisted so we only pass valid identifiers to OpenAI.
-  const ALLOWED_MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1'];
-  const model = ALLOWED_MODELS.includes(req.body.model) ? req.body.model : 'gpt-4o-mini';
-  if (!transcript) return res.status(400).json({ error: 'No transcript provided.' });
-  if (!tasks.length) return res.status(400).json({ error: 'No tasks requested.' });
-
-  // Guard against absurd input. gpt-4o-mini has a 128k context, but keep a
-  // sane ceiling — ~400k chars is roughly 100k tokens.
-  const text = transcript.slice(0, 400000);
-
-  const client = new OpenAI({ apiKey });
-  const result = {};
-
   try {
-    const wantSummary = tasks.includes('summary');
-    const wantActions = tasks.includes('actions');
-
-    if (wantSummary || wantActions) {
-      const fields = [];
-      if (wantSummary) fields.push(
-        '"summary": a thorough summary written as 2-4 short paragraphs (not bullet points). ' +
-        'Open with one sentence stating what the conversation was and who was involved, then cover the ' +
-        'main topics discussed, any decisions or conclusions reached, points of disagreement or open ' +
-        'questions, and notable details, context, numbers, names, or examples that came up. Be specific ' +
-        'and substantive — capture the actual content, not vague generalities. Aim for real depth while ' +
-        'staying readable.'
-      );
-      if (wantActions) fields.push(
-        '"actionItems": an array of the concrete next steps from this conversation. Apply these rules ' +
-        'consistently so the same transcript always yields the same list:\n' +
-        '  • INCLUDE a step only if someone explicitly committed to it, was asked/assigned to do it, or the ' +
-        'group clearly agreed it should happen. Look for language like "I\'ll...", "we need to...", "can you...", ' +
-        '"let\'s...", "the next step is...", "by [date]".\n' +
-        '  • EXCLUDE general discussion, opinions, background, ideas mentioned in passing, and things that were ' +
-        'considered but not agreed. If it was only talked about, it is NOT an action item.\n' +
-        '  • Write each item as one short imperative sentence starting with a verb, self-contained. Include the ' +
-        'responsible person and any deadline when the transcript states them. Do not invent or infer tasks that ' +
-        'were not actually raised. Merge duplicates. Order them by the order they came up.\n' +
-        '  • If there are genuinely no committed next steps, return an empty array — do not pad the list.'
-      );
-      const sys = 'You are a precise meeting/transcript analyst. You read carefully and capture specifics — ' +
-        'names, numbers, decisions, and concrete next steps — rather than generic summaries. Respond with a ' +
-        'single JSON object and nothing else.';
-      const prompt =
-        `Analyze the transcript below and produce a JSON object with these fields:\n` +
-        fields.map(f => '- ' + f).join('\n') +
-        `\n\nReturn only valid JSON. Transcript:\n"""\n${text}\n"""`;
-      const completion = await client.chat.completions.create({
-        model,
-        messages: [{ role: 'system', content: sys }, { role: 'user', content: prompt }],
-        response_format: { type: 'json_object' },
-        max_tokens: 2000,
-        // temperature 0 + a fixed seed make repeated runs of the SAME
-        // transcript produce the same result (best-effort reproducibility).
-        // This was the main cause of action-item lists varying wildly
-        // between identical uploads.
-        temperature: 0,
-        seed: 1234,
-      });
-      let parsed = {};
-      try { parsed = JSON.parse(completion.choices[0].message.content); } catch {}
-      if (wantSummary) result.summary = (parsed.summary || '').toString().trim();
-      if (wantActions) result.actionItems = Array.isArray(parsed.actionItems)
-        ? parsed.actionItems.map(s => s.toString().trim()).filter(Boolean) : [];
-    }
-
-    if (tasks.includes('translate')) {
-      const lang = targetLanguage || 'English';
-      const completion = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: 'system', content: `You are a translator. Translate the user's transcript into ${lang}. Preserve speaker labels and line breaks. Output only the translation, no preamble.` },
-          { role: 'user', content: text },
-        ],
-        max_tokens: 8000,
-        temperature: 0,
-        seed: 1234,
-      });
-      result.translation = (completion.choices[0].message.content || '').trim();
-      result.translationLanguage = lang;
-    }
-
+    const result = await runPostProcess(apiKey, {
+      transcript: req.body.transcript,
+      tasks: req.body.tasks,
+      targetLanguage: req.body.targetLanguage,
+      model: req.body.model,
+    });
     res.json(result);
   } catch (e) {
-    const msg = (e && (e.message || (e.error && e.error.message))) || 'Post-processing failed.';
-    // Sanitize common OpenAI errors
-    let clean = msg;
-    if (/api key/i.test(msg) || /invalid_api_key/i.test(msg)) clean = 'OpenAI rejected the key.';
-    else if (/quota/i.test(msg) || /insufficient/i.test(msg)) clean = 'Your OpenAI account is out of quota for this request.';
-    else if (/rate limit/i.test(msg)) clean = 'OpenAI rate limit hit — wait a moment and retry.';
-    res.status(502).json({ error: clean });
+    res.status(e.status || 502).json({ error: e.status ? e.message : sanitizeOpenAiError(e) });
   }
 });
 
@@ -1321,6 +1341,17 @@ async function registerSelf() {
 // ============================================================================
 // Start
 // ============================================================================
+
+// Mount the MCP server (POST /mcp). Tools call the in-process service
+// functions directly; provider keys arrive via connector headers.
+mountMcp(app, express, {
+  createTranscriptionJob,
+  fetchAudioToTemp,
+  jobs,
+  serializeJob,
+  runPostProcess,
+  isShuttingDown: () => shuttingDown,
+});
 
 app.listen(PORT, () => {
   console.log(`Transcribe server listening on :${PORT}`);
