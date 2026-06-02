@@ -17,6 +17,8 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
+const dns = require('dns').promises;
+const net = require('net');
 const OpenAI = require('openai');
 
 // ============================================================================
@@ -219,6 +221,120 @@ let shuttingDown = false;
 const BUILD_VERSION = process.env.BUILD_VERSION || 'dev';
 app.get('/api/version', (req, res) => res.json({ version: BUILD_VERSION, shuttingDown }));
 
+// ============================================================================
+// URL ingestion helpers (SSRF-guarded fetch of remote audio/video)
+// ============================================================================
+function isPrivateIp(ip) {
+  if (net.isIPv4(ip)) {
+    const p = ip.split('.').map(Number);
+    if (p[0] === 10 || p[0] === 127 || p[0] === 0) return true;
+    if (p[0] === 169 && p[1] === 254) return true;            // link-local + cloud metadata
+    if (p[0] === 172 && p[1] >= 16 && p[1] <= 31) return true;
+    if (p[0] === 192 && p[1] === 168) return true;
+    if (p[0] === 100 && p[1] >= 64 && p[1] <= 127) return true; // CGNAT
+    return false;
+  }
+  const lower = ip.toLowerCase();
+  if (lower === '::1' || lower === '::') return true;
+  if (lower.startsWith('fe80')) return true;                  // link-local
+  if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // unique-local
+  if (lower.startsWith('::ffff:')) return isPrivateIp(lower.slice(7)); // v4-mapped
+  return false;
+}
+
+// Reject anything that isn't a public http(s) URL — prevents the server from
+// being tricked into fetching internal services or cloud metadata (SSRF).
+async function assertPublicUrl(urlStr) {
+  let u;
+  try { u = new URL(urlStr); } catch { throw new Error('Invalid URL.'); }
+  if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('Only http(s) URLs are allowed.');
+  const host = u.hostname;
+  if (/^(localhost|.*\.local|.*\.internal)$/i.test(host)) throw new Error('That URL host is not allowed.');
+  let ips;
+  if (net.isIP(host)) ips = [host];
+  else {
+    try { ips = (await dns.lookup(host, { all: true })).map(r => r.address); }
+    catch { throw new Error('Could not resolve the URL host.'); }
+  }
+  for (const ip of ips) {
+    if (isPrivateIp(ip)) throw new Error('That URL resolves to a private address and is not allowed.');
+  }
+  return u;
+}
+
+// Fetch a remote audio/video URL to a temp file. Re-validates at every redirect
+// hop (so a redirect can't smuggle us to a private address), enforces a 30s
+// timeout and the global size cap while streaming.
+async function fetchAudioToTemp(urlStr) {
+  let current = urlStr;
+  let resp = null;
+  for (let hop = 0; hop < 4; hop++) {
+    await assertPublicUrl(current);
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 30000);
+    let r;
+    try {
+      r = await fetch(current, {
+        redirect: 'manual',
+        signal: ctrl.signal,
+        headers: { 'User-Agent': 'AutomateAnythingTranscribe/1.0' },
+      });
+    } catch (e) {
+      throw new Error('Could not reach that URL.');
+    } finally { clearTimeout(timer); }
+    if (r.status >= 300 && r.status < 400 && r.headers.get('location')) {
+      current = new URL(r.headers.get('location'), current).toString();
+      continue;
+    }
+    resp = r; break;
+  }
+  if (!resp) throw new Error('Too many redirects.');
+  if (!resp.ok) throw new Error(`The URL returned ${resp.status}.`);
+
+  const declaredLen = parseInt(resp.headers.get('content-length') || '0', 10);
+  if (declaredLen && declaredLen > MAX_FILE_SIZE) throw new Error('Audio at that URL exceeds the size limit.');
+
+  // Filename + extension (guess from content-type if the URL has none)
+  const u = new URL(current);
+  let name = decodeURIComponent(path.basename(u.pathname)) || 'audio';
+  if (!path.extname(name)) {
+    const ct = (resp.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+    const extMap = {
+      'audio/mpeg': '.mp3', 'audio/mp3': '.mp3', 'audio/mp4': '.m4a', 'audio/x-m4a': '.m4a',
+      'audio/wav': '.wav', 'audio/x-wav': '.wav', 'audio/webm': '.webm', 'audio/ogg': '.ogg',
+      'audio/aac': '.aac', 'audio/opus': '.opus',
+      'video/mp4': '.mp4', 'video/quicktime': '.mov', 'video/webm': '.webm',
+    };
+    name += extMap[ct] || '.mp3';
+  }
+  const safeName = name.replace(/[^\w.\-]/g, '_').slice(0, 100);
+  const tmpPath = path.join(os.tmpdir(), crypto.randomBytes(12).toString('hex') + '-' + safeName);
+
+  const fileStream = fs.createWriteStream(tmpPath);
+  let written = 0;
+  try {
+    const reader = resp.body.getReader();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      written += value.length;
+      if (written > MAX_FILE_SIZE) {
+        throw new Error('Audio at that URL exceeds the size limit.');
+      }
+      if (!fileStream.write(Buffer.from(value))) {
+        await new Promise(r => fileStream.once('drain', r));
+      }
+    }
+    await new Promise((resolve, reject) => { fileStream.end(resolve); fileStream.on('error', reject); });
+  } catch (e) {
+    try { fileStream.destroy(); } catch {}
+    try { fs.unlinkSync(tmpPath); } catch {}
+    throw e;
+  }
+  if (written === 0) { try { fs.unlinkSync(tmpPath); } catch {} throw new Error('The URL returned no data.'); }
+  return { path: tmpPath, size: written, originalname: name };
+}
+
 app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
   if (shuttingDown) {
     return res.status(503).json({ error: 'Server is updating — try again in a moment.' });
@@ -241,38 +357,64 @@ app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
   }
   if (!req.file) return res.status(400).json({ error: 'No file uploaded.' });
 
-  // Branch on provider. Default is OpenAI Whisper (single-speaker).
-  const provider = (req.body.provider || 'openai').toLowerCase();
+  const fileInfo = { path: req.file.path, size: req.file.size, originalname: req.file.originalname };
+  return dispatchTranscription(res, fileInfo, apiKey, parseTranscribeOptions(req.body));
+});
 
-  // Language code (ISO 639-1 like 'he', 'en', 'es', or empty for auto-detect).
-  // Validate shape so we don't pass arbitrary user input downstream. Max 5
-  // chars covers 2-letter codes plus optional region suffix (e.g. en_us).
-  const rawLang = (req.body.language || '').toString().trim().toLowerCase();
-  const language = /^[a-z]{2}(_[a-z]{2})?$/.test(rawLang) ? rawLang : '';
+// ============================================================================
+// URL-based ingestion (for API / MCP callers): instead of multipart-uploading
+// bytes, the caller passes a URL to the audio/video and we fetch it server-
+// side. Same job pipeline afterward. JSON body + Bearer provider key.
+// ============================================================================
+app.post('/api/transcribe-url', transcribeLimiter, express.json({ limit: '8kb' }), async (req, res) => {
+  if (shuttingDown) return res.status(503).json({ error: 'Server is updating — try again in a moment.' });
+  const auth = req.headers.authorization || '';
+  const apiKey = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+  if (!apiKey) return res.status(401).json({ error: 'Missing API key (Bearer).' });
 
-  // Optional comma/newline-separated vocabulary hints (names, jargon).
-  // Capped in length and item count to keep requests sane.
-  const keyterms = (req.body.keyterms || '').toString().trim().slice(0, 800);
+  const audioUrl = (req.body.audioUrl || req.body.url || '').toString().trim();
+  if (!audioUrl) return res.status(400).json({ error: 'Provide audioUrl.' });
 
-  // Code-switching: caller declares the audio mixes languages. We then rely on
-  // language detection (never a pinned language) plus a code-switching prompt.
-  const codeSwitching = req.body.codeSwitching === '1' || req.body.codeSwitching === 'true';
-  // Optional named languages present (hints woven into the prompt). Plain
-  // language NAMES, comma-separated, capped.
-  const csLanguages = (req.body.languages || '').toString().trim().slice(0, 200);
+  let fileInfo;
+  try {
+    fileInfo = await fetchAudioToTemp(audioUrl);
+  } catch (e) {
+    return res.status(400).json({ error: e.message || 'Could not fetch the audio URL.' });
+  }
+  return dispatchTranscription(res, fileInfo, apiKey, parseTranscribeOptions(req.body));
+});
+
+// Parse + validate the shared transcription options from a request body
+// (works for both multipart form fields and JSON).
+function parseTranscribeOptions(body) {
+  body = body || {};
+  const rawLang = (body.language || '').toString().trim().toLowerCase();
+  return {
+    provider: (body.provider || 'openai').toString().toLowerCase(),
+    language: /^[a-z]{2}(_[a-z]{2})?$/.test(rawLang) ? rawLang : '',
+    keyterms: (body.keyterms || '').toString().trim().slice(0, 800),
+    codeSwitching: body.codeSwitching === '1' || body.codeSwitching === true || body.codeSwitching === 'true',
+    csLanguages: (body.languages || '').toString().trim().slice(0, 200),
+  };
+}
+
+// Validate the key for the chosen provider, create the job, and dispatch it.
+// Shared by the multipart and URL ingestion endpoints. `fileInfo` is
+// { path, size, originalname }. Cleans up the temp file on validation failure.
+function dispatchTranscription(res, fileInfo, apiKey, opts) {
+  const { provider, language, keyterms, codeSwitching, csLanguages } = opts;
+  const cleanup = () => { try { fs.unlinkSync(fileInfo.path); } catch {} };
 
   if (provider === 'assemblyai') {
-    // AssemblyAI keys are 32-char hex-ish strings, no required prefix
     if (apiKey.length < 20) {
-      try { fs.unlinkSync(req.file.path); } catch {}
+      cleanup();
       return res.status(401).json({ error: "That key doesn't look right for AssemblyAI." });
     }
-    return startAssemblyJob(req, res, apiKey, language, keyterms, codeSwitching, csLanguages);
+    return startAssemblyJob(res, fileInfo, apiKey, language, keyterms, codeSwitching, csLanguages);
   }
 
-  // OpenAI Whisper path (existing behavior)
   if (!apiKey.startsWith('sk-') || apiKey.length < 20) {
-    try { fs.unlinkSync(req.file.path); } catch {}
+    cleanup();
     return res.status(401).json({ error: "That key doesn't look right. OpenAI keys start with sk-" });
   }
 
@@ -285,17 +427,17 @@ app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
     message: 'Analyzing audio',
     progress: 0,
     transcript: '',
-    utterances: null, // diarized output (AssemblyAI only)
-    segments: null,   // [{start,end,text}] timestamped segments (Whisper)
+    utterances: null,
+    segments: null,
     error: null,
     chunkInfo: { current: 0, total: 0, usedSilence: 0 },
     duration: null,
-    fileSize: req.file.size,
-    originalName: req.file.originalname,
-    inputPath: req.file.path,
+    fileSize: fileInfo.size,
+    originalName: fileInfo.originalname,
+    inputPath: fileInfo.path,
     workDir: null,
     silences: [],
-    pathTaken: '',   // 'direct' | 'split-only' | 'full'
+    pathTaken: '',
     language,
     keyterms,
     createdAt: Date.now(),
@@ -311,7 +453,7 @@ app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
   });
 
   res.json({ jobId });
-});
+}
 
 // ============================================================================
 // AssemblyAI (multi-speaker / diarized) handler
@@ -319,7 +461,7 @@ app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
 // Flow: upload bytes -> submit transcript with speaker_labels -> poll until done.
 // ============================================================================
 
-function startAssemblyJob(req, res, apiKey, language, keyterms, codeSwitching, csLanguages) {
+function startAssemblyJob(res, fileInfo, apiKey, language, keyterms, codeSwitching, csLanguages) {
   const jobId = crypto.randomBytes(12).toString('hex');
   const job = {
     id: jobId,
@@ -332,9 +474,9 @@ function startAssemblyJob(req, res, apiKey, language, keyterms, codeSwitching, c
     utterances: null,
     error: null,
     duration: null,
-    fileSize: req.file.size,
-    originalName: req.file.originalname,
-    inputPath: req.file.path,
+    fileSize: fileInfo.size,
+    originalName: fileInfo.originalname,
+    inputPath: fileInfo.path,
     workDir: null,
     chunkInfo: { current: 0, total: 0, usedSilence: 0 },
     pathTaken: 'assemblyai',
