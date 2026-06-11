@@ -1049,6 +1049,21 @@
     }
     @media (min-width: 768px) { .dz-visual { padding: 3.5rem 2rem; } .dz-visual h2 { font-size: 2.25rem; } }
 
+    .add-more-zone {
+      position: relative; display: flex; align-items: center; justify-content: center;
+      margin-top: 0.75rem; padding: 0.75rem 1rem;
+      border: 1px dashed var(--border-strong); border-radius: 6px;
+      background: var(--bg-card); cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+    }
+    .add-more-zone:hover { border-color: var(--accent); background: rgba(75, 108, 140, 0.08); }
+    .add-more-zone.drag-over { background: var(--accent); border-color: var(--accent); border-style: solid; }
+    .add-more-zone.drag-over .add-more-text { color: var(--fg); }
+    .add-more-text {
+      font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em;
+      text-transform: uppercase; color: var(--fg-muted); pointer-events: none;
+    }
     .bulk-blocked-note {
       margin-top: 0.85rem; padding: 0.7rem 1rem;
       background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
@@ -2139,6 +2154,12 @@
           <div id="batch-list" class="batch-list"></div>
         </div>
 
+        <!-- Compact "add more files" drop zone (own server only) -->
+        <label id="add-more-zone" class="add-more-zone hidden">
+          <input id="add-more-input" type="file" accept="audio/*,video/*" multiple class="dz-input" aria-label="Add more audio or video files">
+          <span class="add-more-text">+ Drag more files here, or click to choose</span>
+        </label>
+
         <!-- AI extras (optional, OpenAI key required) -->
         <div id="ai-extras" class="ai-extras hidden">
           <div class="ai-extras-head">
@@ -3208,6 +3229,9 @@
       $('dropzone').classList.toggle('hidden', !!state.file);
       $('record-cta').classList.toggle('hidden', !!state.file);
       $('file-panel').classList.toggle('hidden', !state.file);
+      // "Add more files" strip: only once files exist AND on the user's own
+      // server (the shared server is single-file only).
+      $('add-more-zone') && $('add-more-zone').classList.toggle('hidden', !state.file || !isOwnServer());
 
       if (state.file) {
         const multi = state.batch.length > 1;
@@ -4319,6 +4343,21 @@
       handleFiles(e.dataTransfer.files);
     });
     fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+
+    // Compact "add more files" drop zone (shown once files exist, own server only).
+    const addZone = $('add-more-zone'), addInput = $('add-more-input');
+    let addDragCounter = 0;
+    if (addZone) {
+      addZone.addEventListener('dragenter', (e) => { e.preventDefault(); addDragCounter++; addZone.classList.add('drag-over'); });
+      addZone.addEventListener('dragleave', (e) => { e.preventDefault(); addDragCounter--; if (addDragCounter <= 0) addZone.classList.remove('drag-over'); });
+      addZone.addEventListener('dragover', (e) => e.preventDefault());
+      addZone.addEventListener('drop', (e) => {
+        e.preventDefault(); addDragCounter = 0; addZone.classList.remove('drag-over');
+        handleFiles(e.dataTransfer.files);
+      });
+      addInput.addEventListener('change', (e) => { handleFiles(e.target.files); e.target.value = ''; });
+    }
+
     $('bulk-blocked-setup') && $('bulk-blocked-setup').addEventListener('click', () => {
       hideBulkBlockedNotice();
       openAdvancedModal(false);
