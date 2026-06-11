@@ -82,7 +82,7 @@ function releaseHeavySlot() {
 // Pairing
 const PAIRING_CODE        = process.env.PAIRING_CODE || '';
 const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL || '';
-const REGISTER_URL        = (process.env.REGISTER_URL || 'https://audio-transcriber-ccy7.onrender.com').replace(/\/+$/, '');
+const REGISTER_URL        = (process.env.REGISTER_URL || 'https://audio-transcriber-xd31.onrender.com').replace(/\/+$/, '');
 const PAIRING_TTL_MS      = 30 * 60 * 1000;
 const MAX_PAIRINGS        = 10_000;      // memory cap
 const MIN_CODE_LENGTH     = 12;          // forces high-entropy codes (e.g. word-word-xxxxxx)
