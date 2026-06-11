@@ -1163,6 +1163,11 @@
     }
     .export-item:hover { background: rgba(75,108,140,0.15); }
     .export-item:disabled { opacity: 0.4; cursor: not-allowed; }
+    .export-all-group { margin-top: 0.3rem; padding-top: 0.3rem; border-top: 1px solid var(--border); }
+    .export-group-label {
+      font-family: var(--font-mono); font-size: 9px; text-transform: uppercase;
+      letter-spacing: 0.14em; color: var(--fg-faint); padding: 0.35rem 0.7rem 0.25rem;
+    }
     .tx-search-row {
       display: flex; align-items: center; gap: 0.75rem;
       padding: 0.7rem 1.5rem; border-bottom: 1px solid var(--border);
@@ -2225,6 +2230,13 @@
                   <button class="export-item" data-fmt="txt-ts" role="menuitem">Text with timestamps</button>
                   <button class="export-item" data-fmt="srt" role="menuitem">Subtitles (.srt)</button>
                   <button class="export-item" data-fmt="vtt" role="menuitem">Web captions (.vtt)</button>
+                  <div id="export-all-group" class="export-all-group hidden">
+                    <div class="export-group-label" id="export-all-label">Export all</div>
+                    <button class="export-item" data-scope="all" data-fmt="txt" role="menuitem">All — plain text (.txt)</button>
+                    <button class="export-item" data-scope="all" data-fmt="txt-ts" role="menuitem">All — text with timestamps</button>
+                    <button class="export-item" data-scope="all" data-fmt="srt" role="menuitem">All — subtitles (.srt)</button>
+                    <button class="export-item" data-scope="all" data-fmt="vtt" role="menuitem">All — web captions (.vtt)</button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -2830,7 +2842,10 @@
       let consecutiveFailures = 0;
       let attemptedReattach = false;
       const isActive = () => state.activeBatchId === item.id;
-      const refresh = () => { if (isActive()) { mirrorItemToState(item); render(); } renderBatch(); };
+      // Always render() so the file-panel buttons reflect overall batch state
+      // (e.g. "Working...") even when the running item isn't the one being
+      // viewed. Only mirror the transcript into state.* for the active item.
+      const refresh = () => { if (isActive()) mirrorItemToState(item); renderBatch(); render(); };
 
       while (true) {
         let res, networkErr;
@@ -2908,7 +2923,9 @@
       item.chunkInfo = { current: 0, total: 0, usedSilence: 0 };
       item.elapsedStart = Date.now(); item.elapsed = 0;
       const isActive = () => state.activeBatchId === item.id;
-      const refresh = () => { if (isActive()) { mirrorItemToState(item); render(); } renderBatch(); };
+      // Always render() so global buttons (Transcribe/Working/Clear) reflect
+      // batch state even when this item isn't the one being viewed.
+      const refresh = () => { if (isActive()) mirrorItemToState(item); renderBatch(); render(); };
       if (isActive()) startTimer();
       refresh();
 
@@ -3318,9 +3335,10 @@
     // ============================================================================
     // Diarized transcript renderer
     // ============================================================================
-    function speakerLabel(rawId) {
+    function speakerLabel(rawId, src = state) {
       // rawId is what AssemblyAI returns (typically 'A', 'B', 'C', ... or '1','2',...)
-      if (state.speakerNames[rawId]) return state.speakerNames[rawId];
+      const names = src.speakerNames || {};
+      if (names[rawId]) return names[rawId];
       return 'Speaker ' + rawId;
     }
 
@@ -3448,11 +3466,11 @@
     }
 
     // Build a copyable / downloadable diarized string from current utterances
-    function diarizedToText() {
-      if (!Array.isArray(state.utterances)) return state.transcript || '';
-      return state.utterances.map(u => {
+    function diarizedToText(src = state) {
+      if (!Array.isArray(src.utterances)) return src.transcript || '';
+      return src.utterances.map(u => {
         const t = fmtTimeMs(u.start_ms);
-        const s = speakerLabel(u.speaker);
+        const s = speakerLabel(u.speaker, src);
         return `${s} · ${t}\n${u.text}`;
       }).join('\n\n');
     }
@@ -3463,17 +3481,17 @@
 
     // Returns a normalized list of timed cues from whichever data we have:
     // AssemblyAI utterances (with speaker) or Whisper segments. [] if none.
-    function timedCues() {
-      if (Array.isArray(state.utterances) && state.utterances.length) {
-        return state.utterances.map(u => ({
+    function timedCues(src = state) {
+      if (Array.isArray(src.utterances) && src.utterances.length) {
+        return src.utterances.map(u => ({
           start: (u.start_ms || 0) / 1000,
           end: (u.end_ms || 0) / 1000,
           text: u.text || '',
-          speaker: speakerLabel(u.speaker),
+          speaker: speakerLabel(u.speaker, src),
         }));
       }
-      if (Array.isArray(state.segments) && state.segments.length) {
-        return state.segments.map(s => ({
+      if (Array.isArray(src.segments) && src.segments.length) {
+        return src.segments.map(s => ({
           start: s.start || 0,
           end: s.end || 0,
           text: s.text || '',
@@ -3483,8 +3501,8 @@
       return [];
     }
 
-    function hasTimestamps() {
-      return timedCues().length > 0;
+    function hasTimestamps(src = state) {
+      return timedCues(src).length > 0;
     }
 
     // Format seconds -> "HH:MM:SS,mmm" (SRT) or "HH:MM:SS.mmm" (VTT)
@@ -3498,8 +3516,8 @@
       return `${p2(h)}:${p2(m)}:${p2(s)}${sep}${String(ms).padStart(3, '0')}`;
     }
 
-    function buildSRT() {
-      const cues = timedCues();
+    function buildSRT(src = state) {
+      const cues = timedCues(src);
       if (!cues.length) return '';
       return cues.map((c, i) => {
         const line = c.speaker ? `${c.speaker}: ${c.text}` : c.text;
@@ -3507,8 +3525,8 @@
       }).join('\n\n') + '\n';
     }
 
-    function buildVTT() {
-      const cues = timedCues();
+    function buildVTT(src = state) {
+      const cues = timedCues(src);
       if (!cues.length) return '';
       const body = cues.map((c) => {
         const line = c.speaker ? `<v ${c.speaker}>${c.text}` : c.text;
@@ -3518,9 +3536,9 @@
     }
 
     // Plain text with leading [HH:MM:SS] timestamps per cue/turn
-    function buildTimestampedText() {
-      const cues = timedCues();
-      if (!cues.length) return state.transcript || '';
+    function buildTimestampedText(src = state) {
+      const cues = timedCues(src);
+      if (!cues.length) return src.transcript || '';
       return cues.map(c => {
         const stamp = fmtTimeMs(c.start * 1000);
         const who = c.speaker ? `${c.speaker} ` : '';
@@ -3528,16 +3546,56 @@
       }).join('\n\n') + '\n';
     }
 
-    function downloadText(text, ext, mime) {
+    // Build the export text for one source (state or a batch item) + format.
+    // Returns { text, ext, mime }. Shared by single-file and export-all so the
+    // two paths can't drift.
+    function buildExport(src, fmt) {
+      switch (fmt) {
+        case 'txt-ts': return { text: buildTimestampedText(src), ext: 'txt', mime: 'text/plain' };
+        case 'srt':    return { text: buildSRT(src), ext: 'srt', mime: 'application/x-subrip' };
+        case 'vtt':    return { text: buildVTT(src), ext: 'vtt', mime: 'text/vtt' };
+        case 'txt':
+        default: {
+          const text = (Array.isArray(src.utterances) && src.utterances.length)
+            ? diarizedToText(src) : (src.transcript || '');
+          return { text, ext: 'txt', mime: 'text/plain' };
+        }
+      }
+    }
+
+    function downloadText(text, ext, mime, filename) {
       const blob = new Blob([text], { type: (mime || 'text/plain') + ';charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = (state.file?.name || 'transcript').replace(/\.[^.]+$/, '') + '.' + ext;
+      const base = filename != null ? filename : (state.file?.name || 'transcript').replace(/\.[^.]+$/, '');
+      a.download = base + '.' + ext;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+
+    // Export all completed batch transcripts as one combined file.
+    function exportAllBatch(fmt) {
+      const done = state.batch.filter(i => i.stage === 'done' && (i.transcript || (Array.isArray(i.utterances) && i.utterances.length)));
+      if (!done.length) return;
+      const { ext, mime } = buildExport(done[0], fmt);
+      const subtitle = (fmt === 'srt' || fmt === 'vtt');
+      const sections = [];
+      const skipped = [];
+      for (const item of done) {
+        if (subtitle && !hasTimestamps(item)) { skipped.push(item.name); continue; }
+        const { text } = buildExport(item, fmt);
+        sections.push(`===== ${item.name} =====\n${(text || '').trim()}`);
+      }
+      let header = '';
+      if (subtitle && skipped.length) {
+        header = `NOTE — these files had no timestamps and were skipped: ${skipped.join(', ')}\n\n`;
+      }
+      if (!sections.length) return; // nothing exportable (e.g. all skipped)
+      const combined = header + sections.join('\n\n\n') + '\n';
+      downloadText(combined, ext, mime, `transcripts-${sections.length}-files`);
     }
 
     // ============================================================================
@@ -4688,9 +4746,16 @@
     function handleFiles(fileList) {
       const files = Array.from(fileList || []).filter(Boolean);
       if (!files.length) return;
+      const hadActive = !!getActiveItem();
+      const batchRunning = state.batch.some(i => i.started && !['done','error'].includes(i.stage));
       const firstNew = files.map(addBatchFile)[0];
-      // Auto-view the first added file so the panel shows something immediately.
-      if (firstNew) setActiveBatchItem(firstNew.id);
+      // Only steal focus on the first drop. When adding to an existing batch,
+      // leave whatever the user is currently viewing in place.
+      if (!hadActive && firstNew) setActiveBatchItem(firstNew.id);
+      // If a batch is already transcribing, queue the new files in immediately
+      // (capabilities are cached from the first run) instead of waiting for
+      // another Transcribe click.
+      if (batchRunning && activeKey()) pumpBatch();
       renderBatch();
       render();
     }
@@ -4832,8 +4897,10 @@
     // ---- Export menu ----
     // Subtitle formats (.srt/.vtt) only make sense for video — hide them for
     // audio-only sources. Detect via the file's mime type or extension.
-    function isVideoSource() {
-      const f = state.file;
+    function isVideoSource(src = state) {
+      // A batch item carries its own File on `.file`; otherwise treat the source
+      // itself as file-like (has name/type), falling back to state.file.
+      const f = (src && src.file) || (src && src.name ? src : state.file);
       if (!f) return false;
       if (f.type && f.type.startsWith('video/')) return true;
       const name = (f.name || '').toLowerCase();
@@ -4844,19 +4911,40 @@
       const willOpen = open != null ? open : menu.classList.contains('hidden');
       menu.classList.toggle('hidden', !willOpen);
       $('export-btn').setAttribute('aria-expanded', String(willOpen));
+
+      // --- Single-file items (the viewed transcript) ---
       const ts = hasTimestamps();
       const video = isVideoSource();
       // Timestamped text: available whenever we have timing data.
-      menu.querySelectorAll('[data-fmt="txt-ts"]').forEach(el => {
+      menu.querySelectorAll('.export-item[data-fmt="txt-ts"]:not([data-scope])').forEach(el => {
         el.disabled = !ts;
         el.title = ts ? '' : 'No timestamps available for this transcript';
       });
       // Subtitles/captions: only relevant for video. Hide entirely for audio.
-      menu.querySelectorAll('[data-fmt="srt"],[data-fmt="vtt"]').forEach(el => {
+      menu.querySelectorAll('.export-item[data-fmt="srt"]:not([data-scope]),.export-item[data-fmt="vtt"]:not([data-scope])').forEach(el => {
         el.classList.toggle('hidden', !video);
         el.disabled = !ts;
         el.title = ts ? '' : 'No timestamps available for this transcript';
       });
+
+      // --- Export-all group (whole batch) ---
+      const doneItems = state.batch.filter(i => i.stage === 'done' && (i.transcript || (Array.isArray(i.utterances) && i.utterances.length)));
+      const showAll = doneItems.length > 1;
+      $('export-all-group').classList.toggle('hidden', !showAll);
+      if (showAll) {
+        $('export-all-label').textContent = `Export all (${doneItems.length})`;
+        const anyTs = doneItems.some(i => hasTimestamps(i));
+        const anyVideo = doneItems.some(i => isVideoSource(i));
+        menu.querySelectorAll('.export-item[data-scope="all"][data-fmt="txt-ts"]').forEach(el => {
+          el.disabled = !anyTs;
+          el.title = anyTs ? '' : 'No timestamps in any completed file';
+        });
+        menu.querySelectorAll('.export-item[data-scope="all"][data-fmt="srt"],.export-item[data-scope="all"][data-fmt="vtt"]').forEach(el => {
+          el.classList.toggle('hidden', !anyVideo);
+          el.disabled = !anyTs;
+          el.title = anyTs ? '' : 'No timestamps in any completed file';
+        });
+      }
     }
     $('export-btn').addEventListener('click', (e) => { e.stopPropagation(); toggleExportMenu(); });
     document.addEventListener('click', (e) => {
@@ -4867,12 +4955,12 @@
       const item = e.target.closest('.export-item');
       if (!item || item.disabled) return;
       const fmt = item.dataset.fmt;
-      const baseText = (Array.isArray(state.utterances) && state.utterances.length)
-        ? diarizedToText() : state.transcript;
-      if (fmt === 'txt') downloadText(baseText, 'txt', 'text/plain');
-      else if (fmt === 'txt-ts') downloadText(buildTimestampedText(), 'txt', 'text/plain');
-      else if (fmt === 'srt') downloadText(buildSRT(), 'srt', 'application/x-subrip');
-      else if (fmt === 'vtt') downloadText(buildVTT(), 'vtt', 'text/vtt');
+      if (item.dataset.scope === 'all') {
+        exportAllBatch(fmt);
+      } else {
+        const { text, ext, mime } = buildExport(state, fmt);
+        downloadText(text, ext, mime);
+      }
       toggleExportMenu(false);
     });
 
