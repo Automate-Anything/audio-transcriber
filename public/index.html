@@ -1289,6 +1289,33 @@
     }
     .history-item-del:hover { color: var(--error); border-color: var(--error); }
     .history-note { font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: 0.15em; color: var(--fg-faint); margin-top: 0.85rem; }
+    /* Batch list (multiple files) */
+    .batch-section { padding: 0 1.5rem 1.25rem; }
+    .batch-head { display: flex; align-items: center; justify-content: space-between; margin: 0.25rem 0 0.75rem; gap: 1rem; }
+    .batch-list { display: flex; flex-direction: column; gap: 0.5rem; }
+    .batch-item {
+      display: flex; align-items: center; gap: 0.85rem;
+      padding: 0.7rem 0.9rem;
+      background: var(--bg-card); border: 1px solid var(--border);
+      border-radius: 6px; transition: border-color 0.15s, background 0.15s;
+    }
+    .batch-item.active { border-color: var(--accent); }
+    .batch-item-main { flex: 1; min-width: 0; }
+    .batch-item-name {
+      font-family: var(--font-sans); font-size: 0.95rem; color: var(--fg);
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .batch-item-meta { font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.06em; color: var(--fg-muted); margin-top: 0.2rem; text-transform: uppercase; display: flex; align-items: center; gap: 0.5rem; }
+    .batch-item-status { display: inline-flex; align-items: center; gap: 0.4rem; }
+    .batch-item-actions { display: flex; align-items: center; gap: 0.4rem; flex-shrink: 0; }
+    .batch-view-btn, .batch-del-btn {
+      background: transparent; border: 1px solid var(--border); border-radius: 4px;
+      color: var(--fg-muted); cursor: pointer; padding: 0.3rem 0.55rem;
+      font-family: var(--font-mono); font-size: 11px; transition: color 0.15s, border-color 0.15s;
+    }
+    .batch-view-btn:hover { color: var(--accent); border-color: var(--accent); }
+    .batch-del-btn:hover { color: var(--error); border-color: var(--error); }
+    .batch-view-btn[disabled], .batch-del-btn[disabled] { opacity: 0.4; cursor: default; }
     /* AI extras */
     .ai-extras { padding: 1.25rem 1.5rem; }
     .ai-extras-head { display: flex; flex-direction: column; gap: 0.25rem; margin-bottom: 0.9rem; }
@@ -1972,7 +1999,7 @@
 
       <!-- Dropzone -->
       <label id="dropzone" class="dropzone">
-        <input id="file-input" class="dz-input" type="file" accept="audio/*,video/*" aria-label="Choose audio or video file">
+        <input id="file-input" class="dz-input" type="file" accept="audio/*,video/*" multiple aria-label="Choose audio or video files">
         <div class="dz-visual">
           <div class="mono-sm" style="margin-bottom: 1.25rem;">[ Tap or drop file ]</div>
           <h2>Audio <span class="dz-or">or</span> Video</h2>
@@ -2070,7 +2097,7 @@
       <div id="file-panel" class="panel hidden fade-up" style="margin-top: 1rem;">
         <div class="file-row">
           <div style="min-width: 0; flex: 1;">
-            <div class="mono-sm" style="margin-bottom: 0.25rem;">File</div>
+            <div class="mono-sm" id="file-label" style="margin-bottom: 0.25rem;">File</div>
             <div id="file-name" class="file-name" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
             <div id="file-meta" class="file-meta"></div>
           </div>
@@ -2078,6 +2105,15 @@
             <button id="change-btn" class="btn">Change</button>
             <button id="run-btn" class="btn primary hidden">Transcribe</button>
           </div>
+        </div>
+
+        <!-- Batch list (multiple files). Hidden when only one file is queued. -->
+        <div id="batch-section" class="batch-section hidden">
+          <div class="batch-head">
+            <span class="mono-sm" id="batch-count"></span>
+            <span class="mono-sm" id="batch-cap-note"></span>
+          </div>
+          <div id="batch-list" class="batch-list"></div>
         </div>
 
         <!-- AI extras (optional, OpenAI key required) -->
@@ -2528,7 +2564,23 @@
       error: '',
       elapsed: 0,
       pathTaken: '',
+      // --- Multi-file batch ---
+      // Each item is the per-file analogue of the flat fields above:
+      //   { id, file, name, size, jobId, assemblyTranscriptId, stage, message,
+      //     uploadProgress, serverProgress, transcript, utterances, segments,
+      //     speakerNames, duration, error, elapsedStart, chunkInfo, pathTaken,
+      //     started, done }
+      // The flat state.* fields above are a *mirror* of whichever item is
+      // active (state.activeBatchId), so all existing render/edit/export/AI
+      // code keeps working unchanged on the viewed file.
+      batch: [],
+      activeBatchId: null,
     };
+
+    // How many files the current server will transcribe at once. Fetched from
+    // /api/capabilities per server; defaults to 1 (safe for the shared box).
+    let serverMaxConcurrent = 1;
+    const capabilitiesCache = {}; // apiBase() -> maxConcurrent
 
     // Active provider/key derived from recording type
     function activeProvider() { return state.recType === 'multi' ? 'assemblyai' : 'openai'; }
@@ -2710,90 +2762,48 @@
       });
     }
 
-    // Poll the server's job status. Resilient to transient failures (brief
-    // server restart during a deploy): retries with backoff before giving
-    // up. If the server returns 404 for the job (in-memory job lost), tries
-    // to transparently re-attach via the AssemblyAI transcript ID we
-    // persisted to localStorage — the work is still running on AssemblyAI.
-    async function pollJob(initialJobId, onUpdate) {
-      let jobId = initialJobId;
-      let consecutiveFailures = 0;
-      let attemptedReattach = false;
-      while (true) {
-        let res, networkErr;
-        try { res = await fetch(`${apiBase()}/api/jobs/${jobId}`); }
-        catch (e) { networkErr = e; }
-
-        // Network error or 5xx: the server is briefly unreachable (deploy
-        // gap). Back off and try again a few times before giving up.
-        const transient = networkErr || (res && res.status >= 500);
-        if (transient) {
-          consecutiveFailures++;
-          if (consecutiveFailures > 5) {
-            throw new Error('Lost connection to server.');
-          }
-          state.message = 'Reconnecting to server…';
-          render();
-          await new Promise(r => setTimeout(r, 1500 * consecutiveFailures));
-          continue;
-        }
-
-        // 404: the in-memory job is gone (server restarted between requests).
-        // If we have an AssemblyAI transcript ID, transparently reattach.
-        if (res.status === 404) {
-          const saved = readActiveJob();
-          if (!attemptedReattach && saved && saved.assemblyTranscriptId && state.assemblyKey) {
-            attemptedReattach = true;
-            state.message = 'Server updated — reconnecting your job…';
-            render();
-            try {
-              const newId = await reattachAssembly(saved.assemblyTranscriptId, saved.fileName, saved.fileSize);
-              jobId = newId;
-              state.jobId = newId;
-              saveActiveJob(newId, saved.assemblyTranscriptId, saved.fileName, saved.fileSize);
-              consecutiveFailures = 0;
-              continue;
-            } catch (e) {
-              throw new Error('Could not reconnect: ' + (e.message || e));
-            }
-          }
-          throw new Error('Job not found (server may have restarted).');
-        }
-
-        if (!res.ok) throw new Error('Server returned ' + res.status);
-
-        consecutiveFailures = 0;
-        const data = await res.json();
-        // Persist the AssemblyAI transcript ID as soon as we see it — this
-        // is what lets us reattach across restarts.
-        if (data.provider === 'assemblyai' && data.assemblyTranscriptId) {
-          saveActiveJob(jobId, data.assemblyTranscriptId, state.file?.name, state.file?.size);
-        }
-        onUpdate(data);
-        if (data.status === 'done' || data.status === 'error') return data;
-        await new Promise(r => setTimeout(r, 2000));
-      }
-    }
-
-    function readActiveJob() {
-      try { return JSON.parse(localStorage.getItem(ACTIVE_JOB_STORAGE) || 'null'); }
-      catch { return null; }
-    }
-    function saveActiveJob(jobId, assemblyTranscriptId, fileName, fileSize) {
+    // Active in-flight jobs persist as a map keyed by jobId so a batch of
+    // concurrent files can each recover independently after a reload — a single
+    // shared key would let concurrent AssemblyAI jobs overwrite each other.
+    function readActiveJobs() {
       try {
-        const prev = readActiveJob() || {};
-        localStorage.setItem(ACTIVE_JOB_STORAGE, JSON.stringify({
-          jobId,
-          serverUrl: state.serverUrl || '',
-          fileName: fileName || prev.fileName || state.file?.name || 'Recording',
-          fileSize: fileSize ?? prev.fileSize ?? state.file?.size ?? 0,
-          assemblyTranscriptId: assemblyTranscriptId || prev.assemblyTranscriptId || null,
-          at: Date.now(),
-        }));
+        const raw = JSON.parse(localStorage.getItem(ACTIVE_JOB_STORAGE) || 'null');
+        if (!raw) return {};
+        // Back-compat: an older single-object entry → wrap it under its jobId.
+        if (raw.jobId && !raw[raw.jobId]) return { [raw.jobId]: raw };
+        return raw;
+      } catch { return {}; }
+    }
+    function writeActiveJobs(map) {
+      try {
+        if (!map || !Object.keys(map).length) localStorage.removeItem(ACTIVE_JOB_STORAGE);
+        else localStorage.setItem(ACTIVE_JOB_STORAGE, JSON.stringify(map));
       } catch {}
     }
-    function clearActiveJob() {
-      try { localStorage.removeItem(ACTIVE_JOB_STORAGE); } catch {}
+    // Read a single job's saved entry (or the whole map if no id is given).
+    function readActiveJob(jobId) {
+      const map = readActiveJobs();
+      return jobId ? (map[jobId] || null) : map;
+    }
+    function saveActiveJob(jobId, assemblyTranscriptId, fileName, fileSize) {
+      if (!jobId) return;
+      const map = readActiveJobs();
+      const prev = map[jobId] || {};
+      map[jobId] = {
+        jobId,
+        serverUrl: state.serverUrl || '',
+        fileName: fileName || prev.fileName || 'Recording',
+        fileSize: fileSize ?? prev.fileSize ?? 0,
+        assemblyTranscriptId: assemblyTranscriptId || prev.assemblyTranscriptId || null,
+        at: Date.now(),
+      };
+      writeActiveJobs(map);
+    }
+    // Clear one job (by id) or all (no arg).
+    function clearActiveJob(jobId) {
+      if (!jobId) { writeActiveJobs({}); return; }
+      const map = readActiveJobs();
+      if (map[jobId]) { delete map[jobId]; writeActiveJobs(map); }
     }
 
     // Ask the server to start polling an existing AssemblyAI transcript on
@@ -2811,141 +2821,356 @@
       return data.jobId;
     }
 
-    // Poll a job to completion and finalize the UI. Shared by a fresh run()
-    // and by recovery after a page reload.
-    async function pollAndFinalize(jobId) {
-      const final = await pollJob(jobId, (job) => {
-        state.stage = job.stage || 'server-stage';
-        state.message = job.message || '';
-        state.serverProgress = job.progress || 0;
-        state.chunkInfo = job.chunkInfo || state.chunkInfo;
-        state.duration = job.duration;
-        state.pathTaken = job.pathTaken || '';
-        if (job.transcript) state.transcript = job.transcript;
-        if (job.utterances) state.utterances = job.utterances;
-        if (job.segments) state.segments = job.segments;
-        if (job.error) state.error = job.error;
-        render();
-      });
+    // Concurrency-safe per-item poll loop. Unlike the global-state pollJob, this
+    // writes only into `item`, persists per-job, and touches the main panel
+    // (render) only when the item is the one being viewed. Returns the final
+    // job payload.
+    async function pollItemJob(item) {
+      let jobId = item.jobId;
+      let consecutiveFailures = 0;
+      let attemptedReattach = false;
+      const isActive = () => state.activeBatchId === item.id;
+      const refresh = () => { if (isActive()) { mirrorItemToState(item); render(); } renderBatch(); };
 
-      if (final.status === 'error') throw new Error(final.error || 'Server reported an error.');
+      while (true) {
+        let res, networkErr;
+        try { res = await fetch(`${apiBase()}/api/jobs/${jobId}`); }
+        catch (e) { networkErr = e; }
 
-      state.stage = 'done';
-      state.message = 'Complete';
-      state.transcript = final.transcript || state.transcript;
-      state.utterances = final.utterances || state.utterances;
-      state.segments = final.segments || state.segments;
-      render();
-      addToHistory();
-      runPostProcessing();
+        const transient = networkErr || (res && res.status >= 500);
+        if (transient) {
+          consecutiveFailures++;
+          if (consecutiveFailures > 5) throw new Error('Lost connection to server.');
+          item.message = 'Reconnecting to server…'; refresh();
+          await new Promise(r => setTimeout(r, 1500 * consecutiveFailures));
+          continue;
+        }
+
+        if (res.status === 404) {
+          // In-memory job gone (server restart). Reattach if this file is an
+          // AssemblyAI job whose transcript we saved.
+          const saved = readActiveJob(jobId);
+          if (!attemptedReattach && saved && saved.assemblyTranscriptId && state.assemblyKey) {
+            attemptedReattach = true;
+            item.message = 'Server updated — reconnecting your job…'; refresh();
+            try {
+              const newId = await reattachAssembly(saved.assemblyTranscriptId, saved.fileName, saved.fileSize);
+              clearActiveJob(jobId);
+              jobId = newId; item.jobId = newId;
+              saveActiveJob(newId, saved.assemblyTranscriptId, saved.fileName, saved.fileSize);
+              consecutiveFailures = 0;
+              continue;
+            } catch (e) {
+              throw new Error('Could not reconnect: ' + (e.message || e));
+            }
+          }
+          throw new Error('Job not found (server may have restarted).');
+        }
+
+        if (!res.ok) throw new Error('Server returned ' + res.status);
+
+        consecutiveFailures = 0;
+        const data = await res.json();
+        if (data.provider === 'assemblyai' && data.assemblyTranscriptId) {
+          item.assemblyTranscriptId = data.assemblyTranscriptId;
+          saveActiveJob(jobId, data.assemblyTranscriptId, item.name, item.size);
+        }
+        // Apply update onto the item
+        item.stage = data.stage || 'server-stage';
+        item.message = data.message || '';
+        item.serverProgress = data.progress || 0;
+        item.chunkInfo = data.chunkInfo || item.chunkInfo;
+        item.duration = data.duration;
+        item.pathTaken = data.pathTaken || '';
+        if (data.transcript) item.transcript = data.transcript;
+        if (data.utterances) item.utterances = data.utterances;
+        if (data.segments) item.segments = data.segments;
+        if (data.error) item.error = data.error;
+        item.elapsed = item.elapsedStart ? (Date.now() - item.elapsedStart) / 1000 : item.elapsed;
+        refresh();
+
+        if (data.status === 'done' || data.status === 'error') return data;
+        await new Promise(r => setTimeout(r, 2000));
+      }
+    }
+
+    // Upload + transcribe a single batch item to completion. Mutates only the
+    // item (and the main panel iff it's active).
+    async function runBatchItem(item) {
+      const key = activeKey();
+      const provider = activeProvider();
+      item.provider = provider;
+      item.started = true;
+      item.error = '';
+      item.transcript = ''; item.utterances = null; item.segments = null; item.speakerNames = {};
+      item.uploadProgress = 0; item.serverProgress = 0;
+      item.message = 'Uploading'; item.stage = 'uploading';
+      item.chunkInfo = { current: 0, total: 0, usedSilence: 0 };
+      item.elapsedStart = Date.now(); item.elapsed = 0;
+      const isActive = () => state.activeBatchId === item.id;
+      const refresh = () => { if (isActive()) { mirrorItemToState(item); render(); } renderBatch(); };
+      if (isActive()) startTimer();
+      refresh();
+
+      try {
+        const { jobId } = await uploadFile(item.file, key, provider, state.language, (p) => {
+          item.uploadProgress = p; refresh();
+        });
+        item.jobId = jobId;
+        saveActiveJob(jobId, null, item.name, item.size);
+        item.message = 'Queued on server';
+        item.stage = 'server-stage';
+        refresh();
+
+        const final = await pollItemJob(item);
+        if (final.status === 'error') throw new Error(final.error || 'Server reported an error.');
+
+        item.stage = 'done';
+        item.message = 'Complete';
+        item.transcript = final.transcript || item.transcript;
+        item.utterances = final.utterances || item.utterances;
+        item.segments = final.segments || item.segments;
+        item.done = true;
+        clearActiveJob(jobId);
+        addToHistory(item);
+        refresh();
+        if (isActive()) runPostProcessing();
+      } catch (e) {
+        item.error = e.message || 'Something went wrong.';
+        item.stage = 'error';
+        if (item.jobId) clearActiveJob(item.jobId);
+        refresh();
+      } finally {
+        if (isActive()) stopTimer();
+      }
+    }
+
+    // Scheduler: keep at most `serverMaxConcurrent` items running at once,
+    // starting smaller files first so quick wins surface early. The server
+    // also enforces its own limit (queuing extras), so this is just pacing.
+    function pumpBatch() {
+      const running = () => state.batch.filter(i => i.started && !['done','error'].includes(i.stage)).length;
+      const nextQueued = () => state.batch
+        .filter(i => !i.started && i.stage === 'idle')
+        .sort((a, b) => a.size - b.size)[0];
+
+      while (running() < Math.max(1, serverMaxConcurrent)) {
+        const item = nextQueued();
+        if (!item) break;
+        // Fire-and-forget; each completion re-pumps to start the next.
+        runBatchItem(item).finally(() => { pumpBatch(); });
+      }
+    }
+
+    // Look up how many concurrent jobs the active server allows.
+    async function refreshCapabilities() {
+      const base = apiBase();
+      if (capabilitiesCache[base] != null) { serverMaxConcurrent = capabilitiesCache[base]; return; }
+      try {
+        const res = await fetch(`${base}/api/capabilities`);
+        if (res.ok) {
+          const data = await res.json();
+          const n = parseInt(data.maxConcurrent, 10);
+          serverMaxConcurrent = Number.isFinite(n) && n > 0 ? n : 1;
+        } else { serverMaxConcurrent = 1; }
+      } catch { serverMaxConcurrent = 1; }
+      capabilitiesCache[base] = serverMaxConcurrent;
     }
 
     async function run() {
-      if (!state.file) return;
+      if (!state.batch.length) return;
       const key = activeKey();
       const provider = activeProvider();
       if (!key) {
-        state.error = provider === 'assemblyai'
+        const msg = provider === 'assemblyai'
           ? 'Save your AssemblyAI API key first.'
           : 'Save your OpenAI API key first.';
-        state.stage = 'error'; render(); return;
+        const active = getActiveItem();
+        if (active) { active.error = msg; active.stage = 'error'; }
+        state.error = msg; state.stage = 'error'; render(); renderBatch();
+        return;
       }
-      state.error = ''; state.transcript = ''; state.utterances = null; state.segments = null; state.speakerNames = {};
-      // Reset AI extras results panel
-      state.aiResults = null;
-      ['ai-results','ai-summary-block','ai-actions-block','ai-translation-block','ai-results-status'].forEach(id => $(id) && $(id).classList.add('hidden'));
-      state.uploadProgress = 0; state.serverProgress = 0;
-      state.message = 'Uploading'; state.stage = 'uploading';
-      state.chunkInfo = { current: 0, total: 0, usedSilence: 0 };
-      startTimer(); render();
-
-      try {
-        const { jobId } = await uploadFile(state.file, key, provider, state.language, (p) => {
-          state.uploadProgress = p; render();
-        });
-        state.jobId = jobId;
-        // Wipe any stale entry from a previous run before saving fresh —
-        // saveActiveJob carries prev values forward to make incremental
-        // updates easy, and we don't want a previous job's transcript ID
-        // accidentally riding along on a new job.
-        clearActiveJob();
-        saveActiveJob(jobId, null, state.file?.name, state.file?.size);
-        state.message = 'Queued on server';
-        state.stage = 'server-stage';
-        render();
-
-        await pollAndFinalize(jobId);
-        clearActiveJob();
-      } catch (e) {
-        state.error = e.message || 'Something went wrong.';
-        state.stage = 'error'; render();
-        clearActiveJob();
-      } finally { stopTimer(); }
+      await refreshCapabilities();
+      pumpBatch();
+      renderBatch();
     }
 
-    // Attempt to resume an in-flight job after a page reload. Best-effort:
+    // Attempt to resume in-flight jobs after a page reload. Best-effort, per job:
     // - If the server still knows the job, resume polling it.
-    // - If it doesn't (server restart wiped memory) BUT we have an
-    //   AssemblyAI transcript ID and key, reattach via /api/assembly/reattach
-    //   so the new server instance picks the transcript back up. The work
-    //   itself never stopped — it ran on AssemblyAI the whole time.
-    // - Otherwise clear and move on.
-    async function recoverActiveJob() {
-      let saved;
-      try { saved = JSON.parse(localStorage.getItem(ACTIVE_JOB_STORAGE) || 'null'); } catch { saved = null; }
-      if (!saved || !saved.jobId) return;
-      if (Date.now() - (saved.at || 0) > 60 * 60 * 1000) { clearActiveJob(); return; }
-      if (saved.serverUrl) state.serverUrl = saved.serverUrl;
-      try {
+    // - If it doesn't (server restart wiped memory) BUT we have an AssemblyAI
+    //   transcript ID and key, reattach via /api/assembly/reattach so the new
+    //   server instance picks the transcript back up. The work never stopped —
+    //   it ran on AssemblyAI the whole time.
+    // - Otherwise drop that entry and move on.
+    // Each saved job becomes a batch item so multiple concurrent files all
+    // recover, not just one.
+    async function recoverActiveJobs() {
+      const map = readActiveJobs();
+      const entries = Object.values(map).filter(s => s && s.jobId);
+      if (!entries.length) return;
+      // All entries share the same server; pick up its URL from the first.
+      const withUrl = entries.find(e => e.serverUrl);
+      if (withUrl && withUrl.serverUrl) state.serverUrl = withUrl.serverUrl;
+
+      let firstId = null;
+      const resumes = [];
+      for (const saved of entries) {
+        if (Date.now() - (saved.at || 0) > 60 * 60 * 1000) { clearActiveJob(saved.jobId); continue; }
         let probeId = saved.jobId;
-        let res = await fetch(`${apiBase()}/api/jobs/${probeId}`);
-        if (!res.ok) {
-          // Server-side job is gone. Try reattach if we have what we need.
+        let res;
+        try { res = await fetch(`${apiBase()}/api/jobs/${probeId}`); } catch { res = null; }
+        if (!res || !res.ok) {
           if (saved.assemblyTranscriptId && state.assemblyKey) {
             try {
               probeId = await reattachAssembly(saved.assemblyTranscriptId, saved.fileName, saved.fileSize);
+              clearActiveJob(saved.jobId);
               saveActiveJob(probeId, saved.assemblyTranscriptId, saved.fileName, saved.fileSize);
               res = await fetch(`${apiBase()}/api/jobs/${probeId}`);
-              if (!res.ok) { clearActiveJob(); return; }
-            } catch {
-              clearActiveJob(); return;
-            }
-          } else {
-            clearActiveJob(); return;
-          }
+              if (!res.ok) { clearActiveJob(probeId); continue; }
+            } catch { clearActiveJob(saved.jobId); continue; }
+          } else { clearActiveJob(saved.jobId); continue; }
         }
-        const job = await res.json();
-        state.file = { name: saved.fileName || job.originalName || 'Recording', size: job.fileSize || saved.fileSize || 0 };
-        state.jobId = probeId;
-        state.stage = job.stage || 'server-stage';
-        state.message = job.message || 'Resuming…';
-        startTimer(); render();
+        let job;
+        try { job = await res.json(); } catch { clearActiveJob(probeId); continue; }
+
+        // Rebuild a batch item for this recovered job (no real File object —
+        // it's view-only, consistent with prior single-file recovery).
+        const item = addBatchFile({ name: saved.fileName || job.originalName || 'Recording', size: job.fileSize || saved.fileSize || 0 });
+        item.jobId = probeId;
+        item.assemblyTranscriptId = saved.assemblyTranscriptId || job.assemblyTranscriptId || null;
+        item.started = true;
+        item.stage = job.stage || 'server-stage';
+        item.message = job.message || 'Resuming…';
+        item.serverProgress = job.progress || 0;
+        item.duration = job.duration;
+        item.transcript = job.transcript || '';
+        item.utterances = job.utterances || null;
+        item.segments = job.segments || null;
+        item.elapsedStart = Date.now();
+        if (!firstId) firstId = item.id;
+
         if (job.status === 'done' || job.status === 'error') {
-          if (job.status === 'error') { state.error = job.error || 'Server reported an error.'; state.stage = 'error'; render(); }
-          else {
-            state.transcript = job.transcript || '';
-            state.utterances = job.utterances || null;
-            state.segments = job.segments || null;
-            state.stage = 'done'; state.message = 'Complete'; render(); addToHistory();
-          }
-          stopTimer(); clearActiveJob(); return;
+          if (job.status === 'error') { item.stage = 'error'; item.error = job.error || 'Server reported an error.'; }
+          else { item.stage = 'done'; item.message = 'Complete'; item.done = true; addToHistory(item); }
+          clearActiveJob(probeId);
+        } else {
+          resumes.push(item);
         }
-        await pollAndFinalize(probeId);
-        clearActiveJob();
-      } catch {
-        clearActiveJob();
-      } finally { stopTimer(); }
+      }
+
+      if (firstId) { setActiveBatchItem(firstId); }
+      renderBatch(); render();
+
+      // Resume polling any still-running recovered jobs.
+      for (const item of resumes) {
+        (async () => {
+          const isActive = () => state.activeBatchId === item.id;
+          if (isActive()) startTimer();
+          try {
+            const final = await pollItemJob(item);
+            if (final.status === 'error') { item.stage = 'error'; item.error = final.error || 'Server reported an error.'; }
+            else {
+              item.stage = 'done'; item.message = 'Complete';
+              item.transcript = final.transcript || item.transcript;
+              item.utterances = final.utterances || item.utterances;
+              item.segments = final.segments || item.segments;
+              item.done = true; addToHistory(item);
+              if (isActive()) runPostProcessing();
+            }
+            clearActiveJob(item.jobId);
+          } catch (e) {
+            item.stage = 'error'; item.error = e.message || 'Something went wrong.';
+            clearActiveJob(item.jobId);
+          } finally {
+            if (isActive()) { mirrorItemToState(item); render(); stopTimer(); }
+            renderBatch();
+          }
+        })();
+      }
     }
 
     // ============================================================================
     // Render
     // ============================================================================
+
+    // Short human status for a batch item, plus a dot class.
+    function batchItemStatus(item) {
+      switch (item.stage) {
+        case 'idle':       return { text: item.started ? 'Starting…' : 'Queued', dot: '' };
+        case 'queued':     return { text: 'Queued on server', dot: 'active' };
+        case 'uploading':  return { text: `Uploading · ${Math.round((item.uploadProgress || 0) * 100)}%`, dot: 'active' };
+        case 'done':       return { text: 'Done', dot: 'done' };
+        case 'error':      return { text: item.error || 'Error', dot: 'error' };
+        default: {
+          const pct = Math.round(Math.min(1, item.serverProgress || 0) * 100);
+          return { text: (item.message || 'Transcribing') + (pct ? ` · ${pct}%` : ''), dot: 'active' };
+        }
+      }
+    }
+
+    function renderBatch() {
+      const sec = $('batch-section');
+      if (!sec) return;
+      const multi = state.batch.length > 1;
+      sec.classList.toggle('hidden', !multi);
+      if (!multi) { $('batch-list').innerHTML = ''; return; }
+
+      const done = state.batch.filter(i => i.stage === 'done').length;
+      $('batch-count').textContent = `${state.batch.length} files · ${done} done`;
+      const anyStarted = state.batch.some(i => i.started);
+      $('batch-cap-note').textContent = anyStarted
+        ? (serverMaxConcurrent <= 1 ? 'Processing 1 at a time' : `Processing up to ${serverMaxConcurrent} at a time`)
+        : '';
+
+      const list = $('batch-list');
+      list.innerHTML = '';
+      for (const item of state.batch) {
+        const row = document.createElement('div');
+        row.className = 'batch-item' + (item.id === state.activeBatchId ? ' active' : '');
+
+        const main = document.createElement('div');
+        main.className = 'batch-item-main';
+        const st = batchItemStatus(item);
+        const nameEl = document.createElement('div');
+        nameEl.className = 'batch-item-name';
+        nameEl.textContent = item.name;
+        const metaEl = document.createElement('div');
+        metaEl.className = 'batch-item-meta';
+        metaEl.innerHTML = `<span class="batch-item-status"><span class="dot ${st.dot}"></span><span></span></span><span>${fmtBytes(item.size)}</span>`;
+        metaEl.querySelector('.batch-item-status span:last-child').textContent = st.text;
+        main.appendChild(nameEl);
+        main.appendChild(metaEl);
+
+        const actions = document.createElement('div');
+        actions.className = 'batch-item-actions';
+        const viewBtn = document.createElement('button');
+        viewBtn.className = 'batch-view-btn';
+        viewBtn.textContent = item.id === state.activeBatchId ? 'Viewing' : 'View';
+        viewBtn.disabled = item.id === state.activeBatchId;
+        viewBtn.addEventListener('click', () => viewBatchItem(item.id));
+        const delBtn = document.createElement('button');
+        delBtn.className = 'batch-del-btn';
+        delBtn.textContent = 'Remove';
+        // Can't remove a file that's mid-flight.
+        delBtn.disabled = item.started && !['done','error'].includes(item.stage);
+        delBtn.addEventListener('click', () => removeBatchItem(item.id));
+        actions.appendChild(viewBtn);
+        actions.appendChild(delBtn);
+
+        row.appendChild(main);
+        row.appendChild(actions);
+        list.appendChild(row);
+      }
+    }
+
     function render() {
       $('dropzone').classList.toggle('hidden', !!state.file);
       $('record-cta').classList.toggle('hidden', !!state.file);
       $('file-panel').classList.toggle('hidden', !state.file);
 
       if (state.file) {
+        const multi = state.batch.length > 1;
+        $('file-label').textContent = multi ? 'Viewing' : 'File';
         $('file-name').textContent = state.file.name;
         const parts = [fmtBytes(state.file.size)];
         if (state.duration != null) parts.push('· ' + fmtTime(state.duration) + ' of audio');
@@ -2953,9 +3178,20 @@
 
         const busy = !['idle','done','error',''].includes(state.stage);
         const haveKey = !!activeKey();
-        $('run-btn').disabled = busy || !haveKey;
-        $('change-btn').disabled = busy;
-        $('run-btn').textContent = busy ? 'Working...' : (haveKey ? 'Transcribe' : 'Add key first');
+        // How many files still need transcribing, and is anything in flight?
+        const pending = state.batch.filter(i => !i.started && i.stage === 'idle').length;
+        const anyBusy = state.batch.some(i => i.started && !['done','error'].includes(i.stage));
+
+        // Run button: starts the whole batch (or the active file when single).
+        $('run-btn').disabled = anyBusy || !haveKey || (multi ? pending === 0 : busy);
+        $('run-btn').textContent = !haveKey ? 'Add key first'
+          : anyBusy ? 'Working...'
+          : multi ? (pending > 0 ? `Transcribe ${pending} file${pending === 1 ? '' : 's'}` : 'All done')
+          : 'Transcribe';
+
+        // Clear/Change button.
+        $('change-btn').disabled = anyBusy;
+        $('change-btn').textContent = multi ? 'Clear all' : 'Change';
 
         // AI extras require an OpenAI key (used for chat completions).
         $('ai-extras').classList.toggle('hidden', !state.openaiKey || busy);
@@ -3318,19 +3554,25 @@
         if (list.length > 1) { list.pop(); saveHistory(list); }
       }
     }
-    function addToHistory() {
-      const hasContent = !!state.transcript || (Array.isArray(state.utterances) && state.utterances.length);
+    let _historySeq = 0;
+    // Persist a completed transcript. Defaults to the active/flat state, but a
+    // batch item can be passed so background files are saved without being
+    // viewed first.
+    function addToHistory(src) {
+      const s = src || state;
+      const utterances = Array.isArray(s.utterances) ? s.utterances : null;
+      const hasContent = !!s.transcript || (utterances && utterances.length);
       if (!hasContent) return;
       const entry = {
-        id: 'h' + Date.now(),
-        name: state.file?.name || 'Recording',
+        id: 'h' + Date.now() + '_' + (++_historySeq),
+        name: (s.file && s.file.name) || s.name || 'Recording',
         date: Date.now(),
-        provider: (Array.isArray(state.utterances) && state.utterances.length) ? 'assemblyai' : 'openai',
-        transcript: state.transcript || '',
+        provider: (utterances && utterances.length) ? 'assemblyai' : 'openai',
+        transcript: s.transcript || '',
         // Cap stored utterances/segments to keep localStorage manageable
-        utterances: Array.isArray(state.utterances) ? state.utterances : null,
-        segments: Array.isArray(state.segments) ? state.segments : null,
-        speakerNames: state.speakerNames || {},
+        utterances,
+        segments: Array.isArray(s.segments) ? s.segments : null,
+        speakerNames: s.speakerNames || {},
       };
       const list = loadHistory();
       list.unshift(entry);
@@ -3345,13 +3587,16 @@
     function restoreHistory(id) {
       const entry = loadHistory().find(e => e.id === id);
       if (!entry) return;
+      // Detach from the batch — a restored history item is shown standalone.
+      state.activeBatchId = null;
       state.transcript = entry.transcript || '';
       state.utterances = entry.utterances || null;
       state.segments = entry.segments || null;
       state.speakerNames = entry.speakerNames || {};
       state._speakerIdxMap = {};
       state.stage = 'done';
-      state.file = state.file || { name: entry.name, size: 0 };
+      state.file = { name: entry.name, size: 0 };
+      renderBatch();
       render();
       $('transcript-block').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -3989,9 +4234,9 @@
     dz.addEventListener('dragover', (e) => e.preventDefault());
     dz.addEventListener('drop', (e) => {
       e.preventDefault(); dragCounter = 0; dz.classList.remove('drag-over');
-      handleFile(e.dataTransfer.files?.[0]);
+      handleFiles(e.dataTransfer.files);
     });
-    fileInput.addEventListener('change', (e) => handleFile(e.target.files?.[0]));
+    fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
 
     // ============================================================================
     // Record + playback feature
@@ -4322,9 +4567,11 @@
       // Construct a File from the Blob so the existing pipeline treats it
       // like any other uploaded file
       const file = new File([rec.blob], fname, { type: rec.blob.type || 'audio/webm' });
-      // Clean up recording UI and feed into normal flow
+      // Clean up recording UI and feed into normal flow. A recording is a
+      // single fresh capture — replace any existing batch with just this file.
       setRecorderView('idle');
-      handleFile(file);
+      if (state.batch.length) clearBatch();
+      handleFiles([file]);
     }
 
     // ============================================================================
@@ -4436,24 +4683,133 @@
     // File wiring (existing)
     // ============================================================================
 
-    function handleFile(f) {
-      if (!f) return;
-      state.file = f; state.duration = null;
-      state.stage = 'idle'; state.error = ''; state.transcript = '';
-      state.utterances = null; state.speakerNames = {}; state._speakerIdxMap = {};
-      state.uploadProgress = 0; state.serverProgress = 0;
-      state.chunkInfo = { current: 0, total: 0, usedSilence: 0 };
-      state.elapsed = 0;
+    // Accept one or many files. A single file keeps the original feel (it
+    // becomes the sole, active batch item). Multiple files queue up.
+    function handleFiles(fileList) {
+      const files = Array.from(fileList || []).filter(Boolean);
+      if (!files.length) return;
+      const firstNew = files.map(addBatchFile)[0];
+      // Auto-view the first added file so the panel shows something immediately.
+      if (firstNew) setActiveBatchItem(firstNew.id);
+      renderBatch();
       render();
     }
 
-    $('change-btn').addEventListener('click', () => {
+    let _batchSeq = 0;
+    function addBatchFile(file) {
+      const item = {
+        id: 'b' + (++_batchSeq) + '_' + (file.size || 0),
+        file,
+        name: file.name || 'Recording',
+        size: file.size || 0,
+        jobId: null,
+        assemblyTranscriptId: null,
+        stage: 'idle',            // idle | uploading | queued | server-stage | done | error
+        message: '',
+        uploadProgress: 0,
+        serverProgress: 0,
+        transcript: '',
+        utterances: null,
+        segments: null,
+        speakerNames: {},
+        duration: null,
+        error: '',
+        chunkInfo: { current: 0, total: 0, usedSilence: 0 },
+        pathTaken: '',
+        elapsedStart: 0,
+        elapsed: 0,
+        started: false,
+        provider: null,
+      };
+      state.batch.push(item);
+      return item;
+    }
+
+    function getActiveItem() {
+      return state.batch.find(i => i.id === state.activeBatchId) || null;
+    }
+
+    // Copy an item's per-file fields into the flat state.* the main panel reads.
+    function mirrorItemToState(item) {
+      if (!item) return;
+      state.file = item.file || { name: item.name, size: item.size };
+      state.jobId = item.jobId;
+      state.stage = item.stage;
+      state.message = item.message;
+      state.uploadProgress = item.uploadProgress;
+      state.serverProgress = item.serverProgress;
+      state.transcript = item.transcript;
+      state.utterances = item.utterances;
+      state.segments = item.segments;
+      state.speakerNames = item.speakerNames || {};
+      state._speakerIdxMap = {};
+      state.duration = item.duration;
+      state.error = item.error;
+      state.chunkInfo = item.chunkInfo || { current: 0, total: 0, usedSilence: 0 };
+      state.pathTaken = item.pathTaken || '';
+      state.elapsed = item.elapsed || 0;
+    }
+
+    // Switch which file the main panel shows.
+    function setActiveBatchItem(id) {
+      // Leaving edit mode when switching files avoids carrying an unsaved edit
+      // across files.
+      if (state.editing) setEditing(false, false);
+      state.activeBatchId = id;
+      const item = getActiveItem();
+      mirrorItemToState(item);
+      // Reset AI extras panel — it's per-viewed-file.
+      state.aiResults = null;
+      ['ai-results','ai-summary-block','ai-actions-block','ai-translation-block','ai-results-status'].forEach(id2 => $(id2) && $(id2).classList.add('hidden'));
+      renderBatch();
+      render();
+    }
+
+    function viewBatchItem(id) {
+      setActiveBatchItem(id);
+      $('transcript-block')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function removeBatchItem(id) {
+      const item = state.batch.find(i => i.id === id);
+      // Don't yank a file out from under an in-flight job.
+      if (item && item.started && !['done','error'].includes(item.stage)) return;
+      if (item && item.jobId) clearActiveJob(item.jobId);
+      state.batch = state.batch.filter(i => i.id !== id);
+      if (state.activeBatchId === id) {
+        const next = state.batch[0];
+        if (next) setActiveBatchItem(next.id);
+        else { state.activeBatchId = null; resetToEmpty(); }
+      }
+      renderBatch();
+      render();
+    }
+
+    function clearBatch() {
+      // Only clear when nothing is mid-flight.
+      const busy = state.batch.some(i => i.started && !['done','error'].includes(i.stage));
+      if (busy) return;
+      state.batch.forEach(i => i.jobId && clearActiveJob(i.jobId));
+      state.batch = [];
+      state.activeBatchId = null;
+      fileInput.value = '';
+      resetToEmpty();
+      renderBatch();
+      render();
+    }
+
+    // Reset the flat state to the empty "no file" view.
+    function resetToEmpty() {
       state.file = null; state.duration = null; state.stage = 'idle';
       state.transcript = ''; state.error = '';
-      state.utterances = null; state.speakerNames = {}; state._speakerIdxMap = {};
-      fileInput.value = '';
-      render();
-    });
+      state.utterances = null; state.segments = null;
+      state.speakerNames = {}; state._speakerIdxMap = {};
+      state.uploadProgress = 0; state.serverProgress = 0;
+      state.chunkInfo = { current: 0, total: 0, usedSilence: 0 };
+      state.elapsed = 0; state.jobId = null;
+    }
+
+    $('change-btn').addEventListener('click', clearBatch);
 
     $('run-btn').addEventListener('click', run);
 
@@ -4816,8 +5172,8 @@
       applyTheme(savedTheme === 'light' ? 'light' : 'dark');
     } catch { applyTheme('dark'); }
     render();
-    // Best-effort: resume an in-flight transcription if the page was reloaded
-    recoverActiveJob();
+    // Best-effort: resume in-flight transcriptions if the page was reloaded
+    recoverActiveJobs();
   })();
   </script>
 </body>

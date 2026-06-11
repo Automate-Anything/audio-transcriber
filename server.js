@@ -45,6 +45,40 @@ const COMPRESSED_EXTS = ['.mp3', '.m4a', '.mp4', '.aac', '.opus', '.webm', '.ogg
 // If under this size AND already compressed AND under MAX_CHUNK in duration -> send as-is
 const DIRECT_TO_WHISPER_MAX_BYTES = 24 * 1024 * 1024; // a hair under Whisper's 25MB limit
 
+// ---------------------------------------------------------------------------
+// Concurrency: how many CPU-heavy (ffmpeg) jobs may run at once.
+//
+// On our free shared Render server the box is tiny (~0.1 shared vCPU, 512MB)
+// and a single ffmpeg compress already saturates it — so we process one file
+// at a time and queue the rest. On a user's own (paid) server we scale to the
+// instance's CPU allotment. os.cpus() is unreliable in containers (it reports
+// the host, not the cgroup limit), so we trust Render's RENDER_CPU_COUNT env
+// var ("0.5" Starter, "2" Pro, ...). Non-Render hosts fall back to os.cpus().
+const IS_RENDER    = process.env.RENDER === 'true';
+const RENDER_CPUS  = parseFloat(process.env.RENDER_CPU_COUNT || '');     // NaN if unset
+const IS_FREE_PLAN = IS_RENDER && (!RENDER_CPUS || RENDER_CPUS <= 0.25); // free ≈ shared/tiny
+const SERVER_PLAN  = !IS_RENDER ? 'self-hosted' : (IS_FREE_PLAN ? 'free' : 'paid');
+const MAX_CONCURRENT_JOBS = (() => {
+  if (IS_FREE_PLAN) return 1;
+  if (IS_RENDER && RENDER_CPUS) return Math.max(1, Math.min(4, Math.floor(RENDER_CPUS)));
+  // Non-Render VM: os.cpus() is accurate; leave a core for the event loop.
+  return Math.max(1, Math.min(4, os.cpus().length - 1));
+})();
+
+// Simple FIFO semaphore guarding the heavy (OpenAI/ffmpeg) path. AssemblyAI
+// jobs offload work to AssemblyAI's servers, so they are NOT gated here.
+let activeHeavyJobs = 0;
+const heavyWaiters = [];
+function acquireHeavySlot() {
+  if (activeHeavyJobs < MAX_CONCURRENT_JOBS) { activeHeavyJobs++; return Promise.resolve(); }
+  return new Promise((resolve) => heavyWaiters.push(resolve));
+}
+function releaseHeavySlot() {
+  const next = heavyWaiters.shift();
+  if (next) { next(); return; }        // hand the slot straight to the next waiter
+  activeHeavyJobs = Math.max(0, activeHeavyJobs - 1);
+}
+
 // Pairing
 const PAIRING_CODE        = process.env.PAIRING_CODE || '';
 const RENDER_EXTERNAL_URL = process.env.RENDER_EXTERNAL_URL || '';
@@ -115,11 +149,6 @@ const pairLookupLimiter = rateLimit({
   windowMs: 60 * 1000, max: 120, // polling sends ~30/min so leave headroom
   standardHeaders: true, legacyHeaders: false,
   message: { error: 'Too many lookups, please slow down.' },
-});
-const transcribeLimiter = rateLimit({
-  windowMs: 60 * 60 * 1000, max: 30, // 30 transcribe jobs per hour per IP
-  standardHeaders: true, legacyHeaders: false,
-  message: { error: 'You\'ve hit the hourly transcription limit on this server.' },
 });
 const jobsLimiter = rateLimit({
   windowMs: 60 * 1000, max: 240, // polling can be busy
@@ -223,7 +252,7 @@ function publicBaseUrl(req) {
 }
 
 // Create an upload slot. Returns a one-time URL to PUT the file bytes to.
-app.post('/api/uploads', transcribeLimiter, express.json({ limit: '2kb' }), (req, res) => {
+app.post('/api/uploads', express.json({ limit: '2kb' }), (req, res) => {
   if (shuttingDown) return res.status(503).json({ error: 'Server is updating — try again in a moment.' });
   const uploadId = crypto.randomBytes(18).toString('hex');
   const name = (req.body && req.body.fileName ? req.body.fileName.toString() : 'audio')
@@ -241,7 +270,7 @@ app.post('/api/uploads', transcribeLimiter, express.json({ limit: '2kb' }), (req
 });
 
 // Receive the bytes for a slot (raw body stream, size-capped).
-app.put('/api/uploads/:id', transcribeLimiter, (req, res) => {
+app.put('/api/uploads/:id', (req, res) => {
   const slot = uploads.get(req.params.id);
   if (!slot) return res.status(404).json({ error: 'Unknown or expired uploadId.' });
   if (slot.ready) return res.status(409).json({ error: 'This upload slot was already filled.' });
@@ -283,6 +312,13 @@ function consumeUpload(uploadId) {
 }
 
 app.get('/health', (req, res) => res.json({ ok: true }));
+
+// Tells the client how many files this server will transcribe at once so it can
+// pace uploads (and label the UI). The free shared box is 1-at-a-time; a user's
+// own paid server scales with its CPU. See MAX_CONCURRENT_JOBS.
+app.get('/api/capabilities', (req, res) => {
+  res.json({ ok: true, maxConcurrent: MAX_CONCURRENT_JOBS, plan: SERVER_PLAN });
+});
 
 // Graceful-shutdown flag. Flipped to true on SIGTERM so new submissions get a
 // clean "server updating" response instead of a half-handled request that
@@ -410,7 +446,7 @@ async function fetchAudioToTemp(urlStr) {
   return { path: tmpPath, size: written, originalname: name };
 }
 
-app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
+app.post('/api/transcribe', (req, res, next) => {
   if (shuttingDown) {
     return res.status(503).json({ error: 'Server is updating — try again in a moment.' });
   }
@@ -442,7 +478,7 @@ app.post('/api/transcribe', transcribeLimiter, (req, res, next) => {
 // an uploadId from a prior /api/uploads slot. Same job pipeline afterward.
 // JSON body + Bearer provider key.
 // ============================================================================
-app.post('/api/transcribe-url', transcribeLimiter, express.json({ limit: '8kb' }), async (req, res) => {
+app.post('/api/transcribe-url', express.json({ limit: '8kb' }), async (req, res) => {
   if (shuttingDown) return res.status(503).json({ error: 'Server is updating — try again in a moment.' });
   const auth = req.headers.authorization || '';
   const apiKey = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
@@ -804,7 +840,7 @@ app.get('/api/jobs/:id', jobsLimiter, (req, res) => {
 // returns transcripts created with that key, so a user can never reach
 // another user's transcript here.
 // ============================================================================
-app.post('/api/assembly/reattach', transcribeLimiter, express.json({ limit: '64kb' }), (req, res) => {
+app.post('/api/assembly/reattach', express.json({ limit: '64kb' }), (req, res) => {
   if (shuttingDown) return res.status(503).json({ error: 'Server is updating — try again in a moment.' });
   const auth = req.headers.authorization || '';
   const apiKey = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
@@ -1002,9 +1038,20 @@ function cleanupJob(job) {
 // ============================================================================
 
 async function processJob(job) {
-  job.workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tx-'));
+  // Wait for a free CPU slot before doing any heavy ffmpeg/Whisper work. The
+  // job already exists and is pollable; while it waits it simply reports
+  // 'queued' so the client shows it in line. On the free plan this serializes
+  // jobs to one at a time; on bigger servers it scales (see MAX_CONCURRENT_JOBS).
+  if (activeHeavyJobs >= MAX_CONCURRENT_JOBS) {
+    job.stage = 'queued';
+    job.message = 'Waiting for a free slot on the server';
+  }
+  await acquireHeavySlot();
+  let slotReleased = false;
+  const release = () => { if (!slotReleased) { slotReleased = true; releaseHeavySlot(); } };
 
   try {
+    job.workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'tx-'));
     job.stage = 'analyzing';
     job.message = 'Reading audio metadata';
     job.duration = await ffprobeDuration(job.inputPath);
@@ -1100,6 +1147,9 @@ async function processJob(job) {
     job.progress = 1;
     job.message = 'Complete';
   } finally {
+    // Free the CPU slot as soon as processing ends (success or failure) so the
+    // next queued job can start — independent of the delayed temp-file cleanup.
+    release();
     setTimeout(() => cleanupJob(job), 60 * 1000);
   }
 }
