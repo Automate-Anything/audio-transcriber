@@ -9,4 +9,4 @@ services:
       - key: PAIRING_CODE
         sync: false
       - key: REGISTER_URL
-        value: https://audio-transcriber-ccy7.onrender.com
+        value: https://audio-transcriber-xd31.onrender.com
