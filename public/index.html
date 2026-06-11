@@ -1049,6 +1049,17 @@
     }
     @media (min-width: 768px) { .dz-visual { padding: 3.5rem 2rem; } .dz-visual h2 { font-size: 2.25rem; } }
 
+    .bulk-blocked-note {
+      margin-top: 0.85rem; padding: 0.7rem 1rem;
+      background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
+      font-family: var(--font-sans); font-size: 13px; line-height: 1.5; color: var(--fg-muted);
+    }
+    .bulk-blocked-link {
+      background: none; border: none; padding: 0; cursor: pointer;
+      color: var(--accent); font: inherit; text-decoration: underline;
+    }
+    .bulk-blocked-link:hover { color: var(--cta); }
+
     .file-row { display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); }
     @media (min-width: 768px) { .file-row { flex-direction: row; align-items: center; justify-content: space-between; } }
     .file-name { font-family: var(--font-serif); font-size: 1.25rem; font-weight: 400; color: var(--fg); }
@@ -2012,6 +2023,13 @@
         </div>
       </label>
 
+      <!-- Shown when a user tries to bulk-upload on the shared server -->
+      <div id="bulk-blocked-note" class="bulk-blocked-note hidden">
+        Bulk upload needs your own server. On the shared server, transcribe one file at a time —
+        <button type="button" id="bulk-blocked-setup" class="bulk-blocked-link">set up your own server</button>
+        for batches.
+      </div>
+
       <!-- "Or record now" CTA -->
       <div id="record-cta" class="record-cta">
         <div class="record-cta-divider"><span>or</span></div>
@@ -2667,7 +2685,8 @@
     // ============================================================================
     function renderServerBadge() {
       const badge = $('server-badge');
-      if (isOwnServer()) {
+      const own = isOwnServer();
+      if (own) {
         badge.classList.remove('shared');
         badge.classList.add('own');
         $('server-label').textContent = 'Using your private server';
@@ -2682,6 +2701,11 @@
         $('server-label').textContent = 'Using shared free server';
         $('server-sub').textContent = 'good for small files · slow for files over 100 MB';
       }
+      // Bulk upload is own-server-only. Let the OS file picker enforce single
+      // select on the shared server; restore multi-select on the user's own.
+      const fi = $('file-input');
+      if (fi) { if (own) fi.setAttribute('multiple', ''); else fi.removeAttribute('multiple'); }
+      if (own) hideBulkBlockedNotice();
     }
 
     // ============================================================================
@@ -4295,6 +4319,10 @@
       handleFiles(e.dataTransfer.files);
     });
     fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+    $('bulk-blocked-setup') && $('bulk-blocked-setup').addEventListener('click', () => {
+      hideBulkBlockedNotice();
+      openAdvancedModal(false);
+    });
 
     // ============================================================================
     // Record + playback feature
@@ -4741,11 +4769,31 @@
     // File wiring (existing)
     // ============================================================================
 
+    // Show/hide the "bulk needs your own server" notice.
+    function showBulkBlockedNotice() {
+      const el = $('bulk-blocked-note');
+      if (!el) return;
+      el.classList.remove('hidden');
+      clearTimeout(showBulkBlockedNotice._t);
+      showBulkBlockedNotice._t = setTimeout(() => el.classList.add('hidden'), 8000);
+    }
+    function hideBulkBlockedNotice() {
+      $('bulk-blocked-note') && $('bulk-blocked-note').classList.add('hidden');
+    }
+
     // Accept one or many files. A single file keeps the original feel (it
-    // becomes the sole, active batch item). Multiple files queue up.
+    // becomes the sole, active batch item). Multiple files queue up — but only
+    // on the user's own server; the shared server is single-file only.
     function handleFiles(fileList) {
       const files = Array.from(fileList || []).filter(Boolean);
       if (!files.length) return;
+      // Bulk upload is allowed only on the user's own server. On the shared
+      // server, reject a multi-file drop outright (don't even take the first).
+      if (!isOwnServer() && files.length > 1) {
+        showBulkBlockedNotice();
+        return;
+      }
+      hideBulkBlockedNotice();
       const hadActive = !!getActiveItem();
       const batchRunning = state.batch.some(i => i.started && !['done','error'].includes(i.stage));
       const firstNew = files.map(addBatchFile)[0];
