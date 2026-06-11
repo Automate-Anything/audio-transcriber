@@ -1049,6 +1049,14 @@
     }
     @media (min-width: 768px) { .dz-visual { padding: 3.5rem 2rem; } .dz-visual h2 { font-size: 2.25rem; } }
 
+    /* Shared-server-only hint under the dropzone. Hidden on a user's own server. */
+    .dz-single-note {
+      margin-top: 0.75rem; text-align: center;
+      font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.14em;
+      text-transform: uppercase; color: var(--fg-faint);
+    }
+    .dz-single-note.hidden { display: none; }
+
     .add-more-zone {
       position: relative; display: flex; align-items: center; justify-content: center;
       margin-top: 0.75rem; padding: 0.75rem 1rem;
@@ -1064,17 +1072,6 @@
       font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.1em;
       text-transform: uppercase; color: var(--fg-muted); pointer-events: none;
     }
-    .bulk-blocked-note {
-      margin-top: 0.85rem; padding: 0.7rem 1rem;
-      background: var(--bg-card); border: 1px solid var(--border); border-radius: 6px;
-      font-family: var(--font-sans); font-size: 13px; line-height: 1.5; color: var(--fg-muted);
-    }
-    .bulk-blocked-link {
-      background: none; border: none; padding: 0; cursor: pointer;
-      color: var(--accent); font: inherit; text-decoration: underline;
-    }
-    .bulk-blocked-link:hover { color: var(--cta); }
-
     .file-row { display: flex; flex-direction: column; gap: 1rem; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--border); }
     @media (min-width: 768px) { .file-row { flex-direction: row; align-items: center; justify-content: space-between; } }
     .file-name { font-family: var(--font-serif); font-size: 1.25rem; font-weight: 400; color: var(--fg); }
@@ -1752,7 +1749,7 @@
           <span class="dot"></span>
           <div class="text">
             <div class="label" id="server-label">Using shared free server</div>
-            <div class="sub" id="server-sub">good for small files · slow for files over 100 MB</div>
+            <div class="sub" id="server-sub">one file at a time · slow for files over 100 MB</div>
           </div>
         </div>
         <button id="server-change-btn" class="change-link" type="button">Change</button>
@@ -2038,12 +2035,8 @@
         </div>
       </label>
 
-      <!-- Shown when a user tries to bulk-upload on the shared server -->
-      <div id="bulk-blocked-note" class="bulk-blocked-note hidden">
-        Bulk upload needs your own server. On the shared server, transcribe one file at a time —
-        <button type="button" id="bulk-blocked-setup" class="bulk-blocked-link">set up your own server</button>
-        for batches.
-      </div>
+      <!-- Shared-server-only hint: the free box transcribes one file at a time. -->
+      <div id="dz-single-note" class="mono-sm dz-single-note">One file at a time on the shared server</div>
 
       <!-- "Or record now" CTA -->
       <div id="record-cta" class="record-cta">
@@ -2486,6 +2479,24 @@
     </div>
   </div>
 
+  <!-- ===== "One file at a time" notice (shown when 2+ files are selected on the shared server) ===== -->
+  <div id="bulk-blocked-modal" class="modal-overlay hidden">
+    <div class="modal" style="max-width: 30rem;">
+      <div class="modal-header">
+        <div class="modal-title">One file at a time</div>
+        <button class="modal-close" id="bulk-blocked-modal-close" type="button">✕</button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.95rem;">The shared free server transcribes <strong>one file at a time</strong>. To upload and process several files at once, set up your own server — it runs your batch in parallel and is faster for large files.</p>
+
+        <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: 1.25rem;">
+          <button id="bulk-blocked-setup-btn" class="btn primary" style="width: 100%; padding: 0.85rem;" type="button">Set up my own server</button>
+          <button id="bulk-blocked-dismiss-btn" class="btn" style="width: 100%; padding: 0.85rem;" type="button">Just use one file</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- lamejs (MP3 encoder) loaded lazily by the recording feature to keep
        initial page weight low. Bundled locally to avoid CDN dependency
        and to keep script-src 'self' in CSP. LGPL — see /lamejs.min.js -->
@@ -2720,13 +2731,15 @@
         badge.classList.remove('own');
         badge.classList.add('shared');
         $('server-label').textContent = 'Using shared free server';
-        $('server-sub').textContent = 'good for small files · slow for files over 100 MB';
+        $('server-sub').textContent = 'one file at a time · slow for files over 100 MB';
       }
       // Bulk upload is own-server-only. Let the OS file picker enforce single
       // select on the shared server; restore multi-select on the user's own.
       const fi = $('file-input');
       if (fi) { if (own) fi.setAttribute('multiple', ''); else fi.removeAttribute('multiple'); }
-      if (own) hideBulkBlockedNotice();
+      // Show the "one file at a time" dropzone hint only on the shared server.
+      const note = $('dz-single-note');
+      if (note) note.classList.toggle('hidden', own);
     }
 
     // ============================================================================
@@ -4358,8 +4371,13 @@
       addInput.addEventListener('change', (e) => { handleFiles(e.target.files); e.target.value = ''; });
     }
 
-    $('bulk-blocked-setup') && $('bulk-blocked-setup').addEventListener('click', () => {
-      hideBulkBlockedNotice();
+    // "One file at a time" modal — shown when 2+ files are selected on the
+    // shared server (see handleFiles). The primary action sends the user into
+    // the BYO-server setup flow.
+    $('bulk-blocked-modal-close') && $('bulk-blocked-modal-close').addEventListener('click', closeBulkBlockedModal);
+    $('bulk-blocked-dismiss-btn') && $('bulk-blocked-dismiss-btn').addEventListener('click', closeBulkBlockedModal);
+    $('bulk-blocked-setup-btn') && $('bulk-blocked-setup-btn').addEventListener('click', () => {
+      closeBulkBlockedModal();
       openAdvancedModal(false);
     });
 
@@ -4808,16 +4826,12 @@
     // File wiring (existing)
     // ============================================================================
 
-    // Show/hide the "bulk needs your own server" notice.
-    function showBulkBlockedNotice() {
-      const el = $('bulk-blocked-note');
-      if (!el) return;
-      el.classList.remove('hidden');
-      clearTimeout(showBulkBlockedNotice._t);
-      showBulkBlockedNotice._t = setTimeout(() => el.classList.add('hidden'), 8000);
+    // Show/hide the "one file at a time — use your own server" modal.
+    function openBulkBlockedModal() {
+      $('bulk-blocked-modal') && $('bulk-blocked-modal').classList.remove('hidden');
     }
-    function hideBulkBlockedNotice() {
-      $('bulk-blocked-note') && $('bulk-blocked-note').classList.add('hidden');
+    function closeBulkBlockedModal() {
+      $('bulk-blocked-modal') && $('bulk-blocked-modal').classList.add('hidden');
     }
 
     // Accept one or many files. A single file keeps the original feel (it
@@ -4827,12 +4841,12 @@
       const files = Array.from(fileList || []).filter(Boolean);
       if (!files.length) return;
       // Bulk upload is allowed only on the user's own server. On the shared
-      // server, reject a multi-file drop outright (don't even take the first).
+      // server, reject a multi-file drop outright (don't even take the first)
+      // and surface a modal pointing the user at the BYO-server flow.
       if (!isOwnServer() && files.length > 1) {
-        showBulkBlockedNotice();
+        openBulkBlockedModal();
         return;
       }
-      hideBulkBlockedNotice();
       const hadActive = !!getActiveItem();
       const batchRunning = state.batch.some(i => i.started && !['done','error'].includes(i.stage));
       const firstNew = files.map(addBatchFile)[0];
