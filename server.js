@@ -42,6 +42,10 @@ const OUT_BITRATE     = '24k';
 
 // Fast-path: already-compressed formats Whisper accepts directly
 const COMPRESSED_EXTS = ['.mp3', '.m4a', '.mp4', '.aac', '.opus', '.webm', '.ogg', '.mpga', '.mpeg'];
+// Containers that don't segment cleanly with `-c copy` (missing init segments /
+// Opus pre-skip on non-first chunks) — always re-encode these to mp3 before
+// splitting so every chunk is readable by Whisper.
+const STREAMCOPY_UNSAFE_EXTS = ['.webm', '.ogg', '.opus'];
 // If under this size AND already compressed AND under MAX_CHUNK in duration -> send as-is
 const DIRECT_TO_WHISPER_MAX_BYTES = 24 * 1024 * 1024; // a hair under Whisper's 25MB limit
 
@@ -1085,39 +1089,67 @@ async function processJob(job) {
     }
 
     let mediaPath;
+    let mediaExt;       // extension of the chunks we will produce
     let splitPoints = [];
 
-    if (isCompressed) {
-      // PATH B: already compressed — detect silences only, then split with -c copy
-      job.pathTaken = 'split-only';
-      job.stage = 'analyzing';
-      job.message = `Analyzing ${formatTime(job.duration)} for silence points`;
-      await detectSilencesOnly(job);
-      mediaPath = job.inputPath;
-    } else {
-      // PATH C: full pipeline — re-encode + detect silences in one pass
+    // Route by per-chunk BYTE budget, not just duration. Whisper's limit is on
+    // bytes, so a short-but-byte-heavy file (e.g. a video container, or high-
+    // bitrate audio) must be re-encoded even though its duration is small.
+    // Re-encode only when even a full-length (MAX_CHUNK) slice of the source
+    // would exceed Whisper's ceiling; otherwise keep the instant -c copy path.
+    const knownDur = (job.duration != null && job.duration > 0) ? job.duration : null;
+    const bytesPerChunk = knownDur ? (job.fileSize / knownDur) * MAX_CHUNK : Infinity;
+    const needsReencode = !isCompressed
+      || bytesPerChunk >= DIRECT_TO_WHISPER_MAX_BYTES
+      || STREAMCOPY_UNSAFE_EXTS.includes(ext);
+
+    if (needsReencode) {
+      // Re-encode to 16kHz/24kbps mono mp3 (~4MB per MAX_CHUNK chunk) and detect
+      // silences in one pass.
       job.pathTaken = 'full';
       job.stage = 'compressing';
       job.message = `Compressing ${formatTime(job.duration)} of audio`;
       mediaPath = path.join(job.workDir, 'compressed.mp3');
       await compressAndDetectSilences(job, mediaPath);
+      mediaExt = '.mp3';
+      // Lower-bound sanity check: ffmpeg rejects a missing audio stream with a
+      // non-zero exit, but a pathological input could yield an exit-0 near-empty
+      // mp3. Catch that here instead of sending silence to Whisper.
+      if (fs.statSync(mediaPath).size < 2048) {
+        throw new Error('No audible audio found in the file.');
+      }
+      // The re-encoded file has a clean header — recover duration if it was
+      // unknown, so the split decision below can't fall through to a single
+      // oversized chunk (null <= MAX_CHUNK is true in JS).
+      if (knownDur == null) job.duration = await ffprobeDuration(mediaPath);
+    } else {
+      // Already compressed and low-bitrate enough: detect silences only, then
+      // split with -c copy (no re-encode).
+      job.pathTaken = 'split-only';
+      job.stage = 'analyzing';
+      job.message = `Analyzing ${formatTime(job.duration)} for silence points`;
+      await detectSilencesOnly(job);
+      mediaPath = job.inputPath;
+      mediaExt = ext;
     }
 
     // Decide chunks
     let chunkPaths;
     let chunkOffsets; // start time (seconds) of each chunk within the original
-    if (job.duration <= MAX_CHUNK) {
+    if (job.duration != null && job.duration > 0 && job.duration <= MAX_CHUNK) {
       chunkPaths = [mediaPath];
       chunkOffsets = [0];
       job.chunkInfo = { current: 0, total: 1, usedSilence: 0 };
     } else {
+      // Unknown duration falls here too (defense-in-depth): split rather than
+      // risk sending one oversized chunk.
       job.stage = 'splitting';
       job.message = 'Splitting at silence boundaries';
       splitPoints = pickSplitPoints(job.silences, job.duration);
       const silenceAligned = splitPoints.filter(
         t => job.silences.some(s => Math.abs(s.mid - t) < 0.01)
       ).length;
-      chunkPaths = await splitAudio(mediaPath, splitPoints, job.workDir, ext);
+      chunkPaths = await splitAudio(mediaPath, splitPoints, job.workDir, mediaExt);
       // Chunk i starts at splitPoints[i-1] (chunk 0 starts at 0). These are
       // the offsets we add to each chunk's segment timestamps so they line
       // up with the original audio timeline.
@@ -1133,6 +1165,13 @@ async function processJob(job) {
       job.chunkInfo = { ...job.chunkInfo, current: i + 1 };
       job.progress = 0.5 + (i / chunkPaths.length) * 0.5;
       job.message = `Transcribing chunk ${i + 1} of ${chunkPaths.length}`;
+      // Guard: every chunk should be well under Whisper's limit by now (a
+      // MAX_CHUNK re-encoded chunk is ~4MB). If one isn't, fail loudly here
+      // rather than getting a confusing 413 back from OpenAI.
+      const chunkBytes = fs.statSync(chunkPaths[i]).size;
+      if (chunkBytes > DIRECT_TO_WHISPER_MAX_BYTES) {
+        throw new Error(`Internal: chunk ${i + 1} is ${(chunkBytes / 1048576).toFixed(1)}MB, over Whisper's size limit. Please report this file.`);
+      }
       const r = await transcribeFile(chunkPaths[i], job.apiKey, job.language, job.keyterms);
       combined = combined ? `${combined} ${r.text}` : r.text;
       job.transcript = combined;
