@@ -42,10 +42,19 @@ const OUT_BITRATE     = '24k';
 
 // Fast-path: already-compressed formats Whisper accepts directly
 const COMPRESSED_EXTS = ['.mp3', '.m4a', '.mp4', '.aac', '.opus', '.webm', '.ogg', '.mpga', '.mpeg'];
-// Containers that don't segment cleanly with `-c copy` (missing init segments /
-// Opus pre-skip on non-first chunks) — always re-encode these to mp3 before
-// splitting so every chunk is readable by Whisper.
-const STREAMCOPY_UNSAFE_EXTS = ['.webm', '.ogg', '.opus'];
+// Containers that don't segment cleanly with `-c copy` — always re-encode these
+// to mp3 before splitting so every chunk is readable by Whisper.
+//   - webm/ogg/opus: missing init segments / Opus pre-skip on non-first chunks.
+//   - mp4/m4a/aac/mov: the index (moov atom) and AAC decoder config (ASC) live
+//     once at the start of the file. A bare `-c copy` segment (no
+//     movflags=+faststart, no aac_adtstoasc) leaves later chunks without a usable
+//     header, so Whisper rejects them with "Invalid file format" — even though
+//     m4a/mp4 are nominally supported formats. This bites long, low-bitrate voice
+//     recordings (iPhone memos, recorded calls, podcasts) that dodge the
+//     byte-budget re-encode trigger below.
+// This effectively leaves only the mp3 family (.mp3/.mpga/.mpeg) on the fast
+// `-c copy` split path — exactly the elementary streams that segment cleanly.
+const STREAMCOPY_UNSAFE_EXTS = ['.webm', '.ogg', '.opus', '.mp4', '.m4a', '.aac', '.mov'];
 // If under this size AND already compressed AND under MAX_CHUNK in duration -> send as-is
 const DIRECT_TO_WHISPER_MAX_BYTES = 24 * 1024 * 1024; // a hair under Whisper's 25MB limit
 
@@ -418,8 +427,16 @@ async function fetchAudioToTemp(urlStr) {
       'audio/mpeg': '.mp3', 'audio/mp3': '.mp3', 'audio/mp4': '.m4a', 'audio/x-m4a': '.m4a',
       'audio/wav': '.wav', 'audio/x-wav': '.wav', 'audio/webm': '.webm', 'audio/ogg': '.ogg',
       'audio/aac': '.aac', 'audio/opus': '.opus',
+      'audio/flac': '.flac', 'audio/x-flac': '.flac', 'audio/amr': '.amr',
+      'audio/aiff': '.aiff', 'audio/x-aiff': '.aiff', 'audio/x-ms-wma': '.wma',
+      'audio/3gpp': '.3gp',
       'video/mp4': '.mp4', 'video/quicktime': '.mov', 'video/webm': '.webm',
+      'video/x-matroska': '.mkv', 'video/x-msvideo': '.avi', 'video/x-flv': '.flv',
+      'video/x-ms-wmv': '.wmv', 'video/mp2t': '.ts', 'video/3gpp': '.3gp',
+      'video/x-m4v': '.m4v',
     };
+    // Default is .mp3, but the extension is only a label — the re-encode path
+    // sniffs the real format via ffmpeg regardless of name.
     name += extMap[ct] || '.mp3';
   }
   const safeName = name.replace(/[^\w.\-]/g, '_').slice(0, 100);
@@ -1106,6 +1123,12 @@ async function processJob(job) {
     if (needsReencode) {
       // Re-encode to 16kHz/24kbps mono mp3 (~4MB per MAX_CHUNK chunk) and detect
       // silences in one pass.
+      //
+      // This is also the intentional UNIVERSAL FALLBACK: any extension not in
+      // COMPRESSED_EXTS lands here (`!isCompressed`), so anything ffmpeg can
+      // decode — flac, wma, aiff, amr, 3gp, mkv, avi, flv, wmv, m4v, caf, ac3,
+      // ts, … — is transcoded to clean mp3 and stripped of video. Do NOT route
+      // unknown/exotic formats onto a fast path; let them re-encode here.
       job.pathTaken = 'full';
       job.stage = 'compressing';
       job.message = `Compressing ${formatTime(job.duration)} of audio`;
@@ -1304,7 +1327,7 @@ function compressAndDetectSilences(job, outputPath) {
       if (code === 0) { job.progress = 0.5; resolve(); }
       else {
         console.error(`[ffmpeg compress] exit ${code}:\n${stderrTail}`);
-        reject(new Error('Audio compression failed. The file may be corrupted or in an unsupported format.'));
+        reject(new Error('Could not read any audio from this file. It may be corrupted, empty, or in a format this server cannot decode.'));
       }
     });
     proc.on('error', e => {
@@ -1377,10 +1400,17 @@ function pickSplitPoints(silences, totalDuration) {
   return splits;
 }
 
+// Only the mp3 family survives `-c copy` segmenting cleanly (self-framing
+// elementary streams, no global header). Everything else is re-encoded to mp3
+// before reaching here, so chunks are always .mp3 for those inputs.
+const STREAMCOPY_SAFE_EXTS = ['.mp3', '.mpga', '.mpeg'];
+
 function splitAudio(inputPath, splitPoints, workDir, srcExt) {
   return new Promise((resolve, reject) => {
-    // Choose output extension based on input — keeps -c copy honest for the container.
-    const ext = (srcExt && COMPRESSED_EXTS.includes(srcExt)) ? srcExt : '.mp3';
+    // Keep the source extension only for stream-copy-safe formats; otherwise
+    // emit .mp3. (Guards against re-introducing the moov/header bug if the
+    // unsafe list is ever edited — see STREAMCOPY_UNSAFE_EXTS.)
+    const ext = (srcExt && STREAMCOPY_SAFE_EXTS.includes(srcExt)) ? srcExt : '.mp3';
     const pattern = path.join(workDir, `chunk_%03d${ext}`);
     const args = [
       '-i', inputPath,
