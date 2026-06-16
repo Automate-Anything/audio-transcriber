@@ -1351,6 +1351,10 @@
     .ai-extras-badge { font-family: var(--font-mono); font-size: 9px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--cta); border: 1px solid var(--cta); border-radius: 999px; padding: 0.1rem 0.45rem; font-weight: 400; }
     .ai-extras-note { font-family: var(--font-sans); font-size: 12.5px; color: var(--fg-muted); line-height: 1.45; }
     .ai-extras-options { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+    .ai-extras-lock { display: none; font-family: var(--font-sans); font-size: 12.5px; color: var(--fg-muted); line-height: 1.45; margin-bottom: 0.85rem; padding: 0.6rem 0.75rem; border: 1px dashed rgba(255,255,255,0.18); border-radius: 8px; }
+    .ai-extras-lock strong { color: var(--fg); }
+    .ai-extras.locked .ai-extras-lock { display: block; }
+    .ai-extras.locked .ai-extras-options, .ai-extras.locked .ai-model-row { opacity: 0.4; }
     /* Checkbox-style toggle pills */
     .ai-pill {
       display: inline-flex; align-items: center; gap: 0.55rem;
@@ -1933,6 +1937,7 @@
               Get Key <span class="ext-icon" aria-hidden="true">↗</span>
             </a>
           </div>
+          <div id="openai-role-note" style="font-size:12px;color:var(--fg-muted);margin:0.1rem 0 0.7rem;line-height:1.4;">Required — transcribes your single-speaker audio, and powers the AI extras below.</div>
           <div id="key-edit-mode">
             <div class="key-input-wrap">
               <input id="api-key" class="key-input" type="password" placeholder="sk-..." autocomplete="off" spellcheck="false" autocapitalize="off">
@@ -2158,6 +2163,9 @@
           <div class="ai-extras-head">
             <span class="ai-extras-title">AI extras <span class="ai-extras-badge">optional</span></span>
             <span class="ai-extras-note">Select one or more — they run automatically after transcription, using your OpenAI credits.</span>
+          </div>
+          <div class="ai-extras-lock" id="ai-extras-lock">
+            <span aria-hidden="true">🔒</span> Add your <strong>OpenAI API key</strong> above to turn these on. Multi-speaker recordings transcribe with your <strong>AssemblyAI</strong> key, but the AI extras run on OpenAI — so they need an OpenAI key as well.
           </div>
           <div class="ai-extras-options">
             <label class="ai-pill">
@@ -3271,8 +3279,17 @@
         $('change-btn').disabled = anyBusy;
         $('change-btn').textContent = multi ? 'Clear all' : 'Change';
 
-        // AI extras require an OpenAI key (used for chat completions).
-        $('ai-extras').classList.toggle('hidden', !state.openaiKey || busy);
+        // AI extras run on OpenAI. Keep the panel visible so users can see what's
+        // available; lock it (dimmed + disabled + hint) when there's no OpenAI key.
+        // Only hide it outright while a job is running.
+        $('ai-extras').classList.toggle('hidden', busy);
+        const extrasLocked = !state.openaiKey;
+        $('ai-extras').classList.toggle('locked', extrasLocked);
+        ['opt-summary', 'opt-actions', 'opt-translate', 'opt-model'].forEach(function (id) {
+          const el = $(id); if (el) el.disabled = extrasLocked;
+        });
+        const extrasLang = $('opt-translate-lang');
+        if (extrasLang) extrasLang.disabled = extrasLocked || !$('opt-translate').checked;
       }
 
       renderPathPicker();
@@ -4292,8 +4309,15 @@
       try { localStorage.setItem(REC_TYPE_STORAGE, state.recType); } catch {}
       $('rec-type-single').classList.toggle('active', state.recType === 'single');
       $('rec-type-multi').classList.toggle('active', state.recType === 'multi');
-      $('key-panel-openai').classList.toggle('hidden', state.recType !== 'single');
+      // OpenAI key is required to transcribe single-speaker audio AND powers the
+      // AI extras in either mode, so its panel is always available. AssemblyAI key
+      // is only needed for multi-speaker transcription.
+      $('key-panel-openai').classList.remove('hidden');
       $('key-panel-assembly').classList.toggle('hidden', state.recType !== 'multi');
+      const oaiRoleNote = $('openai-role-note');
+      if (oaiRoleNote) oaiRoleNote.textContent = state.recType === 'multi'
+        ? 'Optional — not needed to transcribe (AssemblyAI does that), but unlocks the AI extras below: summary, translation, action items.'
+        : 'Required — transcribes your single-speaker audio, and powers the AI extras below.';
       render();
     }
     $('rec-type-single').addEventListener('click', () => setRecType('single'));
