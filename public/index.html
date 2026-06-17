@@ -4136,6 +4136,7 @@
           translationCues,
         };
         renderAiResults();
+        render(); // re-evaluate the burn-in card so "Translated captions" appears
       } catch (e) {
         aiStatus(e.message || 'Post-processing failed.', true);
       }
