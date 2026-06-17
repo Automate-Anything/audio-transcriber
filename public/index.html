@@ -4225,19 +4225,34 @@
     // result. Field routing (video vs subtitles) is finalised in Phase C against
     // the live Transloadit API; the structure is asserted in unit tests.
     function buildBurnAssembly() {
+      // Transloadit allows exactly ONE /upload/handle step (must be ":original");
+      // both uploaded files land there and are then split by /file/filter (video
+      // by mime, the .ass by filename) before /video/subtitle burns them in.
+      // `result: true` makes the burned video downloadable from Transloadit's
+      // temporary hosting — no S3/R2 needed. Shape mirrors Transloadit's own
+      // burn-subtitle demo.
       return {
         steps: {
-          ':original': { robot: '/upload/handle', fields: ['video'] },
-          subs: { robot: '/upload/handle', fields: ['subtitles'] },
-          burned: {
-            robot: '/video/subtitle',
-            use: { steps: [{ name: ':original', as: 'video' }, { name: 'subs', as: 'subtitles' }] },
-            subtitles_type: 'burned',
-            preset: 'empty',
-            ffmpeg_stack: 'v6',
-            ffmpeg: { 'c:v': 'libx264', 'crf': 20, 'c:a': 'aac', 'b:a': '128k' },
+          ':original': { robot: '/upload/handle' },
+          video_filtered: {
+            robot: '/file/filter', use: ':original',
+            accepts: [['${file.mime}', 'regex', 'video']], error_on_decline: false,
           },
-          exported: { robot: '/file/serve', use: 'burned' },
+          subtitle_filtered: {
+            robot: '/file/filter', use: ':original',
+            accepts: [['${file.name}', 'regex', '\\.ass$']], error_on_decline: false,
+          },
+          subtitled: {
+            robot: '/video/subtitle',
+            use: { bundle_steps: true, steps: [
+              { name: 'video_filtered', as: 'video' },
+              { name: 'subtitle_filtered', as: 'subtitles' },
+            ] },
+            subtitles_type: 'burned',
+            preset: 'ipad-high',
+            ffmpeg_stack: 'v6',
+            result: true,
+          },
         },
       };
     }
@@ -4275,11 +4290,11 @@
         xhr.onload = () => {
           let data = {};
           try { data = JSON.parse(xhr.responseText); } catch {}
-          if (xhr.status >= 200 && xhr.status < 300 && data.assembly_ssl_url) {
+          if (xhr.status >= 200 && xhr.status < 300 && data.assembly_ssl_url && !data.error) {
             try { localStorage.setItem(TL_JOB_STORAGE, JSON.stringify({ url: data.assembly_ssl_url, id: data.assembly_id, name: videoFile.name || '' })); } catch {}
             resolve(data.assembly_ssl_url);
           } else {
-            reject(new Error(data.error || data.message || ('Transloadit error (HTTP ' + xhr.status + ').')));
+            reject(new Error(data.message || data.error || ('Transloadit error (HTTP ' + xhr.status + ').')));
           }
         };
         xhr.onerror = () => reject(new Error('Network error uploading to Transloadit.'));
@@ -4292,7 +4307,7 @@
     function burnResultUrl(data) {
       const r = (data && data.results) || {};
       const pick = (arr) => (Array.isArray(arr) && arr.length) ? (arr[0].ssl_url || arr[0].url) : null;
-      return pick(r.exported) || pick(r.burned) || null;
+      return pick(r.subtitled) || pick(r.exported) || pick(r.burned) || null;
     }
 
     // Poll an assembly until it completes. onProgress({phase:'encode', progress})
