@@ -2270,8 +2270,10 @@
                   <button class="export-item" data-fmt="txt-ts" role="menuitem">Text with timestamps</button>
                   <button class="export-item" data-fmt="srt" role="menuitem">Subtitles (.srt)</button>
                   <button class="export-item" data-fmt="vtt" role="menuitem">Web captions (.vtt)</button>
+                  <button class="export-item" data-fmt="ass" role="menuitem">Styled captions (.ass)</button>
                   <button class="export-item hidden" data-fmt="srt-translated" role="menuitem">Translated subtitles (.srt)</button>
                   <button class="export-item hidden" data-fmt="vtt-translated" role="menuitem">Translated captions (.vtt)</button>
+                  <button class="export-item hidden" data-fmt="ass-translated" role="menuitem">Translated styled captions (.ass)</button>
                   <div id="export-all-group" class="export-all-group hidden">
                     <div class="export-group-label" id="export-all-label">Export all</div>
                     <button class="export-item" data-scope="all" data-fmt="txt" role="menuitem">All — plain text (.txt)</button>
@@ -2340,6 +2342,7 @@
                 <button id="ai-translation-download" class="ai-copy" type="button">Download .txt</button>
                 <button id="ai-translation-srt" class="ai-copy hidden" type="button" title="Download translated subtitles">.srt</button>
                 <button id="ai-translation-vtt" class="ai-copy hidden" type="button" title="Download translated web captions">.vtt</button>
+                <button id="ai-translation-ass" class="ai-copy hidden" type="button" title="Download translated styled captions (per-speaker colour, for burn-in)">.ass</button>
                 <button class="ai-copy" data-target="ai-translation-text" type="button">Copy</button>
               </div>
             </div>
@@ -3621,6 +3624,72 @@
     function buildSRT(src = state) { return cuesToSRT(timedCues(src)); }
     function buildVTT(src = state) { return cuesToVTT(timedCues(src)); }
 
+    // ASS (Advanced SubStation Alpha) — a styled subtitle format. Unlike SRT/VTT
+    // it carries font, colour, outline and per-line styling, which is what lets
+    // us give each speaker their own colour and (later) burn the captions into
+    // the video via ffmpeg. Players like VLC render it directly today.
+    function fmtAssTime(sec) {
+      if (!isFinite(sec) || sec < 0) sec = 0;
+      const h = Math.floor(sec / 3600);
+      const m = Math.floor((sec % 3600) / 60);
+      const s = Math.floor(sec % 60);
+      const cs = Math.floor((sec - Math.floor(sec)) * 100); // centiseconds, never 100
+      const p2 = n => String(n).padStart(2, '0');
+      return `${h}:${p2(m)}:${p2(s)}.${p2(cs)}`;
+    }
+
+    // Distinct, video-legible colours per speaker. ASS colours are &HBBGGRR
+    // (blue-green-red), the reverse of web #RRGGBB.
+    function speakerColorBgr(i) {
+      const palette = ['FFD60A', '4CC9F0', '80ED99', 'FF6B6B', 'C77DFF', 'F9844A', '90E0EF', 'F4A261'];
+      const hex = palette[i % palette.length];
+      return (hex.slice(4, 6) + hex.slice(2, 4) + hex.slice(0, 2)).toUpperCase();
+    }
+
+    // Escape free text for an ASS Dialogue line: real newlines become \N, and
+    // braces (which start ASS override blocks) are neutralised.
+    function assEscape(text) {
+      return (text || '').toString().replace(/\r?\n/g, '\\N').replace(/\{/g, '(').replace(/\}/g, ')').trim();
+    }
+
+    // Build a styled ASS file from an explicit array of cues. Multi-speaker cues
+    // get a per-speaker colour and a bold name label; single-speaker cues use the
+    // default white-with-outline style. opts.fontSize / opts.font are tunable.
+    function cuesToASS(cues, opts = {}) {
+      if (!Array.isArray(cues) || !cues.length) return '';
+      const font = opts.font || 'Arial';
+      const fontSize = opts.fontSize || 48;
+      const head = [
+        '[Script Info]',
+        'ScriptType: v4.00+',
+        'WrapStyle: 0',
+        'ScaledBorderAndShadow: yes',
+        'PlayResX: 1920',
+        'PlayResY: 1080',
+        '',
+        '[V4+ Styles]',
+        'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
+        `Style: Default,${font},${fontSize},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,3,1,2,80,80,60,1`,
+        '',
+        '[Events]',
+        'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
+      ];
+      const speakerColor = {};
+      let nextColor = 0;
+      const events = cues.map(c => {
+        const start = fmtAssTime(c.start);
+        const end = fmtAssTime(c.end);
+        const text = assEscape(c.text);
+        if (c.speaker) {
+          if (!(c.speaker in speakerColor)) speakerColor[c.speaker] = speakerColorBgr(nextColor++);
+          const name = assEscape(c.speaker).replace(/\\N/g, ' ');
+          return `Dialogue: 0,${start},${end},Default,,0,0,0,,{\\c&H${speakerColor[c.speaker]}&\\b1}${name}: {\\b0}${text}`;
+        }
+        return `Dialogue: 0,${start},${end},Default,,0,0,0,,${text}`;
+      });
+      return head.concat(events).join('\n') + '\n';
+    }
+
     // Reassemble translated cues into a readable block for the on-screen
     // translation panel: speaker + timestamp headers for multi-speaker (like
     // diarizedToText), or a flowed paragraph for single-speaker segments.
@@ -3655,6 +3724,7 @@
         case 'txt-ts': return { text: buildTimestampedText(src), ext: 'txt', mime: 'text/plain' };
         case 'srt':    return { text: buildSRT(src), ext: 'srt', mime: 'application/x-subrip' };
         case 'vtt':    return { text: buildVTT(src), ext: 'vtt', mime: 'text/vtt' };
+        case 'ass':    return { text: cuesToASS(timedCues(src)), ext: 'ass', mime: 'text/x-ssa' };
         case 'txt':
         default: {
           const text = (Array.isArray(src.utterances) && src.utterances.length)
@@ -3965,6 +4035,7 @@
         // when the translation came back cue-aligned.
         $('ai-translation-srt').classList.toggle('hidden', !hasCaps);
         $('ai-translation-vtt').classList.toggle('hidden', !hasCaps);
+        $('ai-translation-ass').classList.toggle('hidden', !hasCaps);
       }
     }
 
@@ -4023,10 +4094,12 @@
         .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')) || 'translation';
       const base = (state.file?.name || 'transcript').replace(/\.[^.]+$/, '');
       if (kind === 'vtt') downloadText(cuesToVTT(cues), 'vtt', 'text/vtt', `${base}-${lang}`);
+      else if (kind === 'ass') downloadText(cuesToASS(cues), 'ass', 'text/x-ssa', `${base}-${lang}`);
       else downloadText(cuesToSRT(cues), 'srt', 'application/x-subrip', `${base}-${lang}`);
     }
     $('ai-translation-srt').addEventListener('click', () => downloadTranslatedCaption('srt'));
     $('ai-translation-vtt').addEventListener('click', () => downloadTranslatedCaption('vtt'));
+    $('ai-translation-ass').addEventListener('click', () => downloadTranslatedCaption('ass'));
 
     $('history-clear').addEventListener('click', () => {
       if (confirm('Clear all saved transcripts? This cannot be undone.')) {
@@ -5115,7 +5188,7 @@
         el.title = ts ? '' : 'No timestamps available for this transcript';
       });
       // Subtitles/captions: only relevant for video. Hide entirely for audio.
-      menu.querySelectorAll('.export-item[data-fmt="srt"]:not([data-scope]),.export-item[data-fmt="vtt"]:not([data-scope])').forEach(el => {
+      menu.querySelectorAll('.export-item[data-fmt="srt"]:not([data-scope]),.export-item[data-fmt="vtt"]:not([data-scope]),.export-item[data-fmt="ass"]:not([data-scope])').forEach(el => {
         el.classList.toggle('hidden', !video);
         el.disabled = !ts;
         el.title = ts ? '' : 'No timestamps available for this transcript';
@@ -5125,7 +5198,7 @@
       // a caption file should be able to download it for audio too.
       const transCues = state.aiResults && state.aiResults.translationCues;
       const hasTransCaps = Array.isArray(transCues) && transCues.length > 0;
-      menu.querySelectorAll('.export-item[data-fmt="srt-translated"],.export-item[data-fmt="vtt-translated"]').forEach(el => {
+      menu.querySelectorAll('.export-item[data-fmt="srt-translated"],.export-item[data-fmt="vtt-translated"],.export-item[data-fmt="ass-translated"]').forEach(el => {
         el.classList.toggle('hidden', !hasTransCaps);
       });
 
@@ -5157,8 +5230,8 @@
       const item = e.target.closest('.export-item');
       if (!item || item.disabled) return;
       const fmt = item.dataset.fmt;
-      if (fmt === 'srt-translated' || fmt === 'vtt-translated') {
-        downloadTranslatedCaption(fmt === 'vtt-translated' ? 'vtt' : 'srt');
+      if (fmt === 'srt-translated' || fmt === 'vtt-translated' || fmt === 'ass-translated') {
+        downloadTranslatedCaption(fmt.split('-')[0]); // 'srt' | 'vtt' | 'ass'
         toggleExportMenu(false);
         return;
       }
