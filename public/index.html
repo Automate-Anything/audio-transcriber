@@ -2030,7 +2030,18 @@
           <div class="key-help" style="margin-top: 0.6rem;">
             <label style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
               <span>Number of speakers (optional — improves who-said-what accuracy):</span>
-              <input id="aai-speakers" type="number" min="1" max="10" placeholder="auto" inputmode="numeric" style="width:72px;">
+              <select id="aai-speakers" class="ai-translate-lang" aria-label="Expected number of speakers">
+                <option value="">Auto</option>
+                <option value="2">2</option>
+                <option value="3">3</option>
+                <option value="4">4</option>
+                <option value="5">5</option>
+                <option value="6">6</option>
+                <option value="7">7</option>
+                <option value="8">8</option>
+                <option value="9">9</option>
+                <option value="10">10</option>
+              </select>
             </label>
           </div>
         </div>
@@ -4886,7 +4897,7 @@
 
     // Expected-speaker count (AssemblyAI diarization hint).
     const aaiSpeakersInput = $('aai-speakers');
-    if (aaiSpeakersInput) aaiSpeakersInput.addEventListener('input', () => {
+    if (aaiSpeakersInput) aaiSpeakersInput.addEventListener('change', () => {
       const n = parseInt(aaiSpeakersInput.value, 10);
       state.speakersExpected = (Number.isFinite(n) && n >= 1 && n <= 10) ? n : null;
     });
