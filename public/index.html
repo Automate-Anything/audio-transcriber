@@ -2367,63 +2367,37 @@
           </div>
         </div>
 
-        <!-- Burn captions into video (Transloadit, BYOK). Shown for completed
-             video transcripts that have timestamps + the original File. -->
+        <!-- Burn captions into video (native ffmpeg on a server you connect).
+             Shown for completed video transcripts with timestamps + the File. -->
         <div id="burnin-block" class="ai-block hidden">
           <div class="ai-block-head">
             <span class="mono-sm">Burn captions into video</span>
           </div>
-          <p class="ai-extras-note" style="margin-bottom: 0.6rem;">Render the captions permanently onto your video. Re-encoded on Transloadit using your own account — long/large videos are billed to you.</p>
-          <div style="display:flex; gap:1.2rem; flex-wrap:wrap; margin:0.4rem 0 0.7rem;">
-            <label style="display:inline-flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="radio" name="burnin-src" id="burnin-src-original" value="original" checked> Original captions</label>
-            <label id="burnin-src-translated-wrap" class="hidden" style="display:inline-flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="radio" name="burnin-src" id="burnin-src-translated" value="translated"> Translated captions</label>
+          <p class="ai-extras-note" style="margin-bottom: 0.6rem;">Render the captions permanently onto your video — native ffmpeg, no watermark. Runs on a server you connect (your own), so encoding stays on your hardware.</p>
+
+          <!-- Shown when the connected server can't burn (e.g. the shared server). -->
+          <div id="burnin-needs-server" class="key-help hidden" style="border:1px dashed var(--border-strong); border-radius:8px; padding:0.75rem 0.9rem;">
+            Burning runs on a server you control — the shared server doesn't encode video.
+            <a href="#" id="burnin-connect-server" style="color:var(--cta);">Connect your own server</a> to enable it.
           </div>
 
-          <!-- Transloadit credentials (BYOK) — used to sign your video jobs. -->
-          <div id="key-panel-transloadit" class="panel key-provider-panel" style="margin-bottom: 0.8rem;">
-            <div class="key-panel">
-              <div class="key-header">
-                <div class="key-label mono-sm">Transloadit credentials</div>
-                <a class="get-key-btn" href="https://transloadit.com/c/signup/" target="_blank" rel="noopener noreferrer">
-                  Get Key <span class="ext-icon" aria-hidden="true">↗</span>
-                </a>
-              </div>
-              <div id="tl-key-edit-mode">
-                <div class="key-input-wrap">
-                  <input id="tl-auth-key" class="key-input" type="text" placeholder="Auth Key" autocomplete="off" spellcheck="false" autocapitalize="off">
-                </div>
-                <div class="key-input-wrap" style="margin-top: 0.5rem;">
-                  <input id="tl-auth-secret" class="key-input" type="password" placeholder="Auth Secret" autocomplete="off" spellcheck="false" autocapitalize="off">
-                  <button id="tl-reveal" class="reveal-btn" type="button">Show</button>
-                </div>
-                <div class="key-actions">
-                  <button id="tl-save-key" class="btn primary">Save</button>
-                  <div id="tl-key-error" class="err-inline hidden"></div>
-                </div>
-              </div>
-              <div id="tl-key-saved-mode" class="hidden">
-                <div class="key-saved-line">
-                  <span class="check">✓</span>
-                  <span class="key-preview" id="tl-key-preview"></span>
-                  <button id="tl-clear-key" class="reveal-btn" type="button">Change</button>
-                </div>
-              </div>
-              <div class="key-help">
-                Saved in this browser only and used to sign your video jobs. You bring your own Transloadit account, so you control the bill.
-              </div>
+          <!-- Shown when the connected server supports burning. -->
+          <div id="burnin-controls" class="hidden">
+            <div style="display:flex; gap:1.2rem; flex-wrap:wrap; margin:0.2rem 0 0.7rem;">
+              <label style="display:inline-flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="radio" name="burnin-src" id="burnin-src-original" value="original" checked> Original captions</label>
+              <label id="burnin-src-translated-wrap" class="hidden" style="display:inline-flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="radio" name="burnin-src" id="burnin-src-translated" value="translated"> Translated captions</label>
             </div>
-          </div>
-
-          <div class="key-actions">
-            <button id="burnin-start" class="btn primary">Burn captions into video</button>
-            <div id="burnin-error" class="err-inline hidden"></div>
-          </div>
-          <div id="burnin-progress" class="hidden" style="margin-top: 0.8rem;">
-            <div class="ai-status-row"><span id="burnin-status-text" class="ai-status-text"></span></div>
-            <div class="ai-status-bar"><div id="burnin-status-fill" class="ai-status-fill" style="width:0%"></div></div>
-          </div>
-          <div id="burnin-result" class="hidden" style="margin-top: 0.8rem;">
-            <a id="burnin-download" class="btn primary" href="#" target="_blank" rel="noopener" download>Download captioned video ↓</a>
+            <div class="key-actions">
+              <button id="burnin-start" class="btn primary">Burn captions into video</button>
+              <div id="burnin-error" class="err-inline hidden"></div>
+            </div>
+            <div id="burnin-progress" class="hidden" style="margin-top: 0.8rem;">
+              <div class="ai-status-row"><span id="burnin-status-text" class="ai-status-text"></span></div>
+              <div class="ai-status-bar"><div id="burnin-status-fill" class="ai-status-fill" style="width:0%"></div></div>
+            </div>
+            <div id="burnin-result" class="hidden" style="margin-top: 0.8rem;">
+              <a id="burnin-download" class="btn primary" href="#" target="_blank" rel="noopener">Download captioned video ↓</a>
+            </div>
           </div>
         </div>
       </div>
@@ -2661,8 +2635,6 @@
     // ============================================================================
     const KEY_STORAGE = 'openai_api_key';
     const AAI_KEY_STORAGE = 'assemblyai_api_key';
-    const TL_KEY_STORAGE = 'transloadit_auth_key';
-    const TL_SECRET_STORAGE = 'transloadit_auth_secret';
     const REC_TYPE_STORAGE = 'recording_type';
     const LANG_STORAGE = 'audio_language';
     const KEYTERMS_STORAGE = 'keyterms';
@@ -2695,8 +2667,6 @@
     const state = {
       openaiKey: '',
       assemblyKey: '',
-      transloaditKey: '',
-      transloaditSecret: '',
       recType: 'single',     // 'single' (OpenAI Whisper) | 'multi' (AssemblyAI)
       language: '',          // ISO 639-1 code, e.g. 'he', 'en'; empty = auto-detect
       keyterms: '',          // optional comma-separated vocabulary hints
@@ -2740,6 +2710,8 @@
     // /api/capabilities per server; defaults to 1 (safe for the shared box).
     let serverMaxConcurrent = 1;
     const capabilitiesCache = {}; // apiBase() -> maxConcurrent
+    const burnCapCache = {};      // apiBase() -> burnEnabled
+    let serverBurnEnabled = false;
 
     // Active provider/key derived from recording type
     function activeProvider() { return state.recType === 'multi' ? 'assemblyai' : 'openai'; }
@@ -3138,16 +3110,24 @@
     // Look up how many concurrent jobs the active server allows.
     async function refreshCapabilities() {
       const base = apiBase();
-      if (capabilitiesCache[base] != null) { serverMaxConcurrent = capabilitiesCache[base]; return; }
+      if (capabilitiesCache[base] != null) {
+        serverMaxConcurrent = capabilitiesCache[base];
+        serverBurnEnabled = !!burnCapCache[base];
+        render();
+        return;
+      }
       try {
         const res = await fetch(`${base}/api/capabilities`);
         if (res.ok) {
           const data = await res.json();
           const n = parseInt(data.maxConcurrent, 10);
           serverMaxConcurrent = Number.isFinite(n) && n > 0 ? n : 1;
-        } else { serverMaxConcurrent = 1; }
-      } catch { serverMaxConcurrent = 1; }
+          serverBurnEnabled = !!data.burnEnabled;
+        } else { serverMaxConcurrent = 1; serverBurnEnabled = false; }
+      } catch { serverMaxConcurrent = 1; serverBurnEnabled = false; }
       capabilitiesCache[base] = serverMaxConcurrent;
+      burnCapCache[base] = serverBurnEnabled;
+      render();
     }
 
     async function run() {
@@ -3484,6 +3464,8 @@
       const canBurn = showTx && isVideoSource() && hasTimestamps() && (state.file instanceof File);
       $('burnin-block').classList.toggle('hidden', !canBurn);
       if (canBurn) {
+        $('burnin-needs-server').classList.toggle('hidden', !!serverBurnEnabled);
+        $('burnin-controls').classList.toggle('hidden', !serverBurnEnabled);
         const hasTrans = !!(state.aiResults && Array.isArray(state.aiResults.translationCues) && state.aiResults.translationCues.length);
         $('burnin-src-translated-wrap').classList.toggle('hidden', !hasTrans);
         if (!hasTrans && $('burnin-src-translated').checked) $('burnin-src-original').checked = true;
@@ -4236,222 +4218,55 @@
     $('ai-translation-ass').addEventListener('click', () => downloadTranslatedCaption('ass'));
 
     // ============================================================================
-    // Video caption burn-in (Transloadit, BYOK) — Phase B: signing + assembly
+    // Caption burn-in (native ffmpeg on a server you connect). No Transloadit.
+    // The active server must report burnEnabled (a self-hosted box) — the shared
+    // server doesn't encode video. We upload the video + the styled .ass, poll
+    // the job, then download the result from that server.
     // ============================================================================
-    // Transloadit jobs are authenticated by signing the JSON params with the
-    // user's Auth Secret (HMAC-SHA384). We sign in the browser via Web Crypto so
-    // the secret stays client-side, consistent with the app's BYOK model. The
-    // signed params + signature get POSTed to Transloadit alongside the uploaded
-    // video + the styled ASS subtitle (Phase C).
-
-    async function hmacSha384Hex(secret, message) {
-      const enc = new TextEncoder();
-      const key = await crypto.subtle.importKey(
-        'raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-384' }, false, ['sign']);
-      const sig = await crypto.subtle.sign('HMAC', key, enc.encode(message));
-      return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
-    }
-
-    // Transloadit expects the expiry as "YYYY/MM/DD HH:MM:SS+00:00" (UTC).
-    function tlExpires(minutesAhead = 60) {
-      const d = new Date(Date.now() + minutesAhead * 60000);
-      const p2 = n => String(n).padStart(2, '0');
-      return `${d.getUTCFullYear()}/${p2(d.getUTCMonth() + 1)}/${p2(d.getUTCDate())} ` +
-             `${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}:${p2(d.getUTCSeconds())}+00:00`;
-    }
-
-    // A random per-request nonce — recommended by Transloadit to prevent
-    // duplicate processing if a request is retried.
-    function tlNonce() {
-      if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
-      const a = new Uint8Array(16); crypto.getRandomValues(a);
-      return Array.from(a).map(b => b.toString(16).padStart(2, '0')).join('');
-    }
-
-    // Sign assembly params. Returns { params, signature } ready to POST as form
-    // fields. `expires`/`nonce` are injectable so the result is deterministic in
-    // tests.
-    async function signAssembly(paramsObj, authKey, secret, expires, nonce) {
-      const params = JSON.stringify({
-        ...paramsObj,
-        auth: { key: authKey, expires: expires || tlExpires(60), nonce: nonce || tlNonce() },
-      });
-      const signature = 'sha384:' + await hmacSha384Hex(secret, params);
-      return { params, signature };
-    }
-
-    // The burn-in Assembly: take the uploaded video + the uploaded ASS subtitle
-    // and hard-burn the subtitle onto the video (full re-encode), then serve the
-    // result. Field routing (video vs subtitles) is finalised in Phase C against
-    // the live Transloadit API; the structure is asserted in unit tests.
-    function buildBurnAssembly() {
-      // Transloadit allows exactly ONE /upload/handle step (must be ":original");
-      // both uploaded files land there and are then split by /file/filter (video
-      // by mime, the .ass by filename) before /video/subtitle burns them in.
-      // `result: true` makes the burned video downloadable from Transloadit's
-      // temporary hosting — no S3/R2 needed. Shape mirrors Transloadit's own
-      // burn-subtitle demo.
-      return {
-        steps: {
-          ':original': { robot: '/upload/handle' },
-          video_filtered: {
-            robot: '/file/filter', use: ':original',
-            accepts: [['${file.mime}', 'regex', 'video']], error_on_decline: false,
-          },
-          subtitle_filtered: {
-            // Transloadit sniffs the .ass as text/plain and renames it
-            // captions.txt, so filter on the PRESERVED original_name, not name.
-            robot: '/file/filter', use: ':original',
-            accepts: [['${file.original_name}', 'regex', '\\.ass$']], error_on_decline: false,
-          },
-          subtitled: {
-            robot: '/video/subtitle',
-            use: { bundle_steps: true, steps: [
-              { name: 'video_filtered', as: 'video' },
-              { name: 'subtitle_filtered', as: 'subtitles' },
-            ] },
-            subtitles_type: 'burned',
-            preset: 'ipad-high',
-            ffmpeg_stack: 'v6',
-            result: true,
-          },
-        },
-      };
-    }
-
-    // ---- Phase C: upload + run + poll ----------------------------------------
-    // NOTE: the network flow below is untested until a live Transloadit account
-    // exists. Field routing (video/subtitles), progress fields, and the result
-    // shape are verified against the real API during Phase C testing.
-    const TL_API = 'https://api2.transloadit.com';
-    const TL_JOB_STORAGE = 'transloadit_active_job';
 
     function assToBlob(assText) {
       return new Blob([assText], { type: 'text/x-ssa;charset=utf-8' });
     }
 
-    // Sign + create a burn-in assembly and upload the video + ASS in one POST.
-    // onProgress({phase:'upload', loaded, total}) reports upload bytes.
-    // Resolves to the assembly status URL (poll it with pollBurnJob).
-    // Create the assembly FIRST (instant, tiny request — so param errors surface
-    // immediately), then upload the subtitle + video via tus resumable uploads.
-    // tus is Transloadit's CORS-friendly browser path and survives flaky
-    // connections, which a direct multipart POST of a multi-GB video does not.
-    async function createBurnJob({ videoFile, assText, onProgress }) {
-      if (!state.transloaditKey || !state.transloaditSecret) throw new Error('Add your Transloadit credentials first.');
-      if (!videoFile) throw new Error('No video to caption.');
-      if (!assText || !assText.trim()) throw new Error('No captions to burn in.');
-
-      const { params, signature } = await signAssembly(buildBurnAssembly(), state.transloaditKey, state.transloaditSecret);
-
-      // Stage 1: create the assembly without file bytes.
-      const fd = new FormData();
-      fd.append('params', params);
-      fd.append('signature', signature);
-      fd.append('num_expected_upload_files', '2');
-      const createRes = await fetch(TL_API + '/assemblies', { method: 'POST', body: fd });
-      let created = {};
-      try { created = await createRes.json(); } catch {}
-      if (!createRes.ok || !created.assembly_ssl_url || created.error) {
-        throw new Error(created.message || created.error || ('Could not create the Transloadit job (HTTP ' + createRes.status + ').'));
-      }
-      const assemblyUrl = created.assembly_ssl_url;
-      const tusUrl = created.tus_url;
-      if (!tusUrl) throw new Error('Transloadit did not return a resumable-upload URL.');
-      try { localStorage.setItem(TL_JOB_STORAGE, JSON.stringify({ url: assemblyUrl, id: created.assembly_id, name: videoFile.name || '' })); } catch {}
-
-      // Stage 2: tus-upload the subtitle (tiny) then the video, reporting
-      // combined byte progress.
-      const subs = assToBlob(assText);
-      const total = subs.size + videoFile.size;
-      let base = 0;
-      await tusUpload(tusUrl, subs, { assembly_url: assemblyUrl, filename: 'captions.ass', fieldname: 'subtitles' },
-        (sent) => onProgress && onProgress({ phase: 'upload', loaded: base + sent, total }));
-      base += subs.size;
-      await tusUpload(tusUrl, videoFile, { assembly_url: assemblyUrl, filename: videoFile.name || 'video.mp4', fieldname: 'video' },
-        (sent) => onProgress && onProgress({ phase: 'upload', loaded: base + sent, total }));
-
-      return assemblyUrl;
-    }
-
-    // Minimal tus 1.0.0 client: create the upload with base64 metadata, then
-    // PATCH the file in 8 MB chunks (resumable-friendly + coarse progress).
-    async function tusUpload(tusBaseUrl, file, metadata, onSent) {
-      const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
-      const metaHeader = Object.keys(metadata).map(k => k + ' ' + b64(String(metadata[k]))).join(',');
-      const createRes = await fetch(tusBaseUrl, {
-        method: 'POST',
-        headers: { 'Tus-Resumable': '1.0.0', 'Upload-Length': String(file.size), 'Upload-Metadata': metaHeader },
+    // Upload video + ass to the active server's /api/burn. onProgress(0..100) is
+    // upload bytes. Resolves to the burn jobId.
+    function uploadBurnVideo(videoFile, assText, onProgress) {
+      return new Promise((resolve, reject) => {
+        const fd = new FormData();
+        fd.append('file', videoFile, videoFile.name || 'video.mp4');
+        fd.append('ass', assToBlob(assText), 'captions.ass');
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `${apiBase()}/api/burn`);
+        xhr.upload.onprogress = (e) => { if (onProgress && e.lengthComputable) onProgress(e.loaded / e.total * 100); };
+        xhr.onload = () => {
+          let data = {};
+          try { data = JSON.parse(xhr.responseText); } catch {}
+          if (xhr.status >= 200 && xhr.status < 300 && data.jobId) resolve(data.jobId);
+          else reject(new Error(data.error || ('Upload failed (HTTP ' + xhr.status + ').')));
+        };
+        xhr.onerror = () => reject(new Error('Network error reaching your server.'));
+        xhr.send(fd);
       });
-      if (createRes.status !== 201) throw new Error('Upload could not start (tus ' + createRes.status + ').');
-      const location = createRes.headers.get('Location');
-      if (!location) throw new Error('Upload start returned no location (CORS may be blocking the Location header).');
-      const uploadUrl = new URL(location, tusBaseUrl).href;
-
-      const CHUNK = 8 * 1024 * 1024; // 8 MB
-      let offset = 0;
-      while (offset < file.size) {
-        const end = Math.min(offset + CHUNK, file.size);
-        const patchRes = await fetch(uploadUrl, {
-          method: 'PATCH',
-          headers: { 'Tus-Resumable': '1.0.0', 'Upload-Offset': String(offset), 'Content-Type': 'application/offset+octet-stream' },
-          body: file.slice(offset, end),
-        });
-        if (patchRes.status !== 204) throw new Error('Upload chunk failed (tus ' + patchRes.status + ').');
-        const next = parseInt(patchRes.headers.get('Upload-Offset') || String(end), 10);
-        offset = isFinite(next) ? next : end;
-        if (onSent) onSent(offset);
-      }
     }
 
-    // Pull the finished file's URL from an assembly result: prefer the served
-    // export step, fall back to the burn step.
-    function burnResultUrl(data) {
-      const r = (data && data.results) || {};
-      const pick = (arr) => (Array.isArray(arr) && arr.length) ? (arr[0].ssl_url || arr[0].url) : null;
-      return pick(r.subtitled) || pick(r.exported) || pick(r.burned) || null;
-    }
-
-    // Poll an assembly until it completes. onProgress({phase:'encode', progress})
-    // where progress is 0..100 or null (indeterminate). Resolves to the burned
-    // video's URL; rejects on Transloadit error/cancel.
-    async function pollBurnJob(statusUrl, onProgress, opts = {}) {
-      const intervalMs = opts.intervalMs || 3000;
+    // Poll a burn job until done; resolves to the download URL.
+    async function pollBurnStatus(jobId, onProgress) {
       for (;;) {
-        const res = await fetch(statusUrl, { cache: 'no-store' });
+        const res = await fetch(`${apiBase()}/api/jobs/${jobId}`, { cache: 'no-store' });
+        if (!res.ok) throw new Error('Lost track of the burn job.');
         const data = await res.json();
-        const ok = data.ok || '';
-        if (ok === 'ASSEMBLY_COMPLETED') {
-          const url = burnResultUrl(data);
-          if (!url) throw new Error('Transloadit finished but returned no output file.');
-          try { localStorage.removeItem(TL_JOB_STORAGE); } catch {}
-          return url;
-        }
-        if (data.error || /CANCEL|FAIL|ABORT|REJECT/.test(ok)) {
-          try { localStorage.removeItem(TL_JOB_STORAGE); } catch {}
-          throw new Error(data.error || data.message || ('Transloadit job ' + (ok || 'failed') + '.'));
-        }
-        if (onProgress) {
-          // Only report real encode progress; bytes are already 100% after the
-          // upload, so don't let that masquerade as burn progress.
-          const pct = typeof data.progress_combined === 'number' ? data.progress_combined : null;
-          onProgress({ phase: 'encode', progress: pct, status: ok, message: data.message });
-        }
-        await new Promise(r => setTimeout(r, intervalMs));
+        if (data.status === 'done') return `${apiBase()}/api/burn/${jobId}/download`;
+        if (data.status === 'error') throw new Error(data.error || 'Burn failed.');
+        if (onProgress) onProgress({ progress: typeof data.progress === 'number' ? data.progress * 100 : null, message: data.message });
+        await new Promise(r => setTimeout(r, 2000));
       }
     }
 
-    // A burn job persisted by createBurnJob, if one was in flight (for resume).
-    function resumeBurnJob() {
-      try { return JSON.parse(localStorage.getItem(TL_JOB_STORAGE) || 'null'); } catch { return null; }
-    }
-
-    // ---- Phase D: burn-in card controller ----
+    // ---- Burn-in card controller ----
     (function wireBurnIn() {
       const startBtn = $('burnin-start');
       if (!startBtn) return;
       let running = false;
-
       const showError = (msg) => { const el = $('burnin-error'); el.textContent = msg; el.classList.remove('hidden'); };
       const setProgress = (text, pct) => {
         $('burnin-progress').classList.remove('hidden');
@@ -4463,57 +4278,37 @@
         if (running) return;
         $('burnin-error').classList.add('hidden');
         $('burnin-result').classList.add('hidden');
-
-        if (!state.transloaditKey || !state.transloaditSecret) {
-          showError('Enter and save your Transloadit credentials above first.');
-          return;
-        }
         if (!(state.file instanceof File)) {
-          showError('The original video isn\'t in the browser for this item — re-add the video file to burn captions.');
+          showError('The original video isn\'t in the browser for this item — re-add it to burn captions.');
           return;
         }
         const useTranslated = $('burnin-src-translated').checked;
-        const cues = useTranslated
-          ? (state.aiResults && state.aiResults.translationCues)
-          : timedCues(state);
-        if (!Array.isArray(cues) || !cues.length) {
-          showError('No captions available to burn in.');
-          return;
-        }
+        const cues = useTranslated ? (state.aiResults && state.aiResults.translationCues) : timedCues(state);
+        if (!Array.isArray(cues) || !cues.length) { showError('No captions available to burn in.'); return; }
         const assText = cuesToASS(cues);
 
         running = true; startBtn.disabled = true;
-        setProgress('Uploading video…', null);
+        setProgress('Uploading video…', 0);
         try {
-          const statusUrl = await createBurnJob({
-            videoFile: state.file,
-            assText,
-            onProgress: ({ phase, loaded, total }) => {
-              if (phase === 'upload' && total) {
-                const p = loaded / total * 100;
-                setProgress('Uploading video… ' + Math.round(p) + '%', p);
-              }
-            },
-          });
-          setProgress('Finalising upload…', null);
-          const url = await pollBurnJob(statusUrl, ({ progress, status, message }) => {
-            const label = status === 'ASSEMBLY_UPLOADING' ? 'Finalising upload…'
-              : status === 'ASSEMBLY_EXECUTING' ? ('Burning captions into video…' + (progress != null ? ' ' + Math.round(progress) + '%' : ''))
-              : (message || 'Processing…');
-            setProgress(label, progress);
-          });
+          const jobId = await uploadBurnVideo(state.file, assText, (p) => setProgress('Uploading video… ' + Math.round(p) + '%', p));
+          setProgress('Burning captions into video…', null);
+          const url = await pollBurnStatus(jobId, ({ progress, message }) => setProgress(message || 'Burning captions into video…', progress));
           setProgress('Done', 100);
-          const dl = $('burnin-download');
-          dl.href = url;
-          const base = (state.file.name || 'video').replace(/\.[^.]+$/, '');
-          dl.setAttribute('download', base + '-captioned.mp4');
+          $('burnin-download').href = url;
           $('burnin-result').classList.remove('hidden');
         } catch (e) {
           $('burnin-progress').classList.add('hidden');
-          showError(e.message || 'Burn-in failed.');
+          showError(e.message || 'Burn failed.');
         } finally {
           running = false; startBtn.disabled = false;
         }
+      });
+
+      const connect = $('burnin-connect-server');
+      if (connect) connect.addEventListener('click', (e) => {
+        e.preventDefault();
+        const inp = $('manual-url-input');
+        if (inp) { inp.scrollIntoView({ behavior: 'smooth', block: 'center' }); try { inp.focus(); } catch {} }
       });
     })();
 
@@ -4859,42 +4654,7 @@
       onChange: (v) => { state.assemblyKey = v; },
     });
 
-    // Transloadit has two fields (Auth Key + Secret), so it gets a small bespoke
-    // panel rather than wireKeyPanel (which is single-field).
-    const transloaditUI = (function () {
-      const $k = $('tl-auth-key'), $s = $('tl-auth-secret');
-      const showSaved = () => {
-        $('tl-key-edit-mode').classList.add('hidden');
-        $('tl-key-saved-mode').classList.remove('hidden');
-        $('tl-key-preview').textContent = state.transloaditKey
-          ? state.transloaditKey.slice(0, 6) + '…' : 'saved';
-      };
-      const showEdit = () => {
-        $('tl-key-saved-mode').classList.add('hidden');
-        $('tl-key-edit-mode').classList.remove('hidden');
-      };
-      $('tl-reveal').addEventListener('click', () => {
-        const showing = $s.type === 'text';
-        $s.type = showing ? 'password' : 'text';
-        $('tl-reveal').textContent = showing ? 'Show' : 'Hide';
-      });
-      $('tl-save-key').addEventListener('click', () => {
-        const k = $k.value.trim(), s = $s.value.trim();
-        const $err = $('tl-key-error');
-        if (!k || !s) { $err.textContent = 'Enter both your Auth Key and Auth Secret.'; $err.classList.remove('hidden'); return; }
-        $err.classList.add('hidden');
-        state.transloaditKey = k; state.transloaditSecret = s;
-        try { localStorage.setItem(TL_KEY_STORAGE, k); localStorage.setItem(TL_SECRET_STORAGE, s); } catch {}
-        showSaved();
-      });
-      $('tl-clear-key').addEventListener('click', () => {
-        state.transloaditKey = ''; state.transloaditSecret = '';
-        try { localStorage.removeItem(TL_KEY_STORAGE); localStorage.removeItem(TL_SECRET_STORAGE); } catch {}
-        $k.value = ''; $s.value = ''; $s.type = 'password'; $('tl-reveal').textContent = 'Show';
-        showEdit();
-      });
-      return { showSaved, showEdit };
-    })();
+    // (Transloadit removed — caption burning runs on a connected server via /api/burn.)
 
     // Expected-speaker count (AssemblyAI diarization hint).
     const aaiSpeakersInput = $('aai-speakers');
@@ -5933,13 +5693,6 @@
     try {
       const savedAaiKey = localStorage.getItem(AAI_KEY_STORAGE);
       if (savedAaiKey) { state.assemblyKey = savedAaiKey; assemblyKeyUI.showSaved(savedAaiKey); }
-
-      const savedTlKey = localStorage.getItem(TL_KEY_STORAGE);
-      const savedTlSecret = localStorage.getItem(TL_SECRET_STORAGE);
-      if (savedTlKey && savedTlSecret) {
-        state.transloaditKey = savedTlKey; state.transloaditSecret = savedTlSecret;
-        transloaditUI.showSaved();
-      }
     } catch {}
     try {
       const savedType = localStorage.getItem(REC_TYPE_STORAGE);

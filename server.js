@@ -29,6 +29,11 @@ const { mountMcp } = require('./mcp.js');
 const PORT = process.env.PORT || 3000;
 const MAX_FILE_SIZE = parseInt(process.env.MAX_FILE_SIZE || (5 * 1024 * 1024 * 1024), 10);
 
+// Caption burn-in is heavy (a full video re-encode) and runs ONLY on servers
+// that explicitly opt in via BURN_ENABLED — i.e. a user's own self-hosted box.
+// The shared/central server leaves it off so it never pays for or queues encodes.
+const BURN_ENABLED = process.env.BURN_ENABLED === '1' || process.env.BURN_ENABLED === 'true';
+
 // Smart chunking (seconds)
 const TARGET_CHUNK    = 18 * 60;
 const MIN_CHUNK       = 14 * 60;
@@ -330,7 +335,7 @@ app.get('/health', (req, res) => res.json({ ok: true }));
 // pace uploads (and label the UI). The free shared box is 1-at-a-time; a user's
 // own paid server scales with its CPU. See MAX_CONCURRENT_JOBS.
 app.get('/api/capabilities', (req, res) => {
-  res.json({ ok: true, maxConcurrent: MAX_CONCURRENT_JOBS, plan: SERVER_PLAN });
+  res.json({ ok: true, maxConcurrent: MAX_CONCURRENT_JOBS, plan: SERVER_PLAN, burnEnabled: BURN_ENABLED });
 });
 
 // Graceful-shutdown flag. Flipped to true on SIGTERM so new submissions get a
@@ -845,6 +850,7 @@ function serializeJob(job) {
     fileSize: job.fileSize,
     originalName: job.originalName,
     pathTaken: job.pathTaken,
+    outputName: job.outputName || null,
   };
 }
 
@@ -852,6 +858,129 @@ app.get('/api/jobs/:id', jobsLimiter, (req, res) => {
   const job = jobs.get(req.params.id);
   if (!job) return res.status(404).json({ error: 'Job not found.' });
   res.json(serializeJob(job));
+});
+
+// ============================================================================
+// Caption burn-in (native ffmpeg). Enabled only when BURN_ENABLED is set — i.e.
+// on a user's own self-hosted server. Upload the video + the styled .ass; we
+// hard-burn the captions onto the frames and serve the result for download.
+// ============================================================================
+
+// Escape a filename for use inside an ffmpeg filtergraph value (ass=...).
+function ffFilterPath(p) {
+  return p.replace(/\\/g, '\\\\').replace(/:/g, '\\:').replace(/'/g, "\\'");
+}
+
+function burnSubtitles(job, assPath, outputPath) {
+  return new Promise((resolve, reject) => {
+    const args = [
+      '-i', job.inputPath,
+      '-vf', 'ass=' + ffFilterPath(assPath),
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23',
+      '-c:a', 'copy',
+      '-progress', 'pipe:1',
+      '-y', outputPath,
+    ];
+    const proc = spawn('ffmpeg', args);
+    let stderrTail = '';
+    proc.stderr.on('data', d => { stderrTail = (stderrTail + d.toString()).slice(-3000); });
+    proc.stdout.on('data', d => {
+      const m = d.toString().match(/out_time_ms=(\d+)/);
+      if (m && job.duration) {
+        const elapsed = parseInt(m[1], 10) / 1_000_000;
+        job.progress = Math.max(0, Math.min(0.99, elapsed / job.duration));
+        job.message = 'Burning captions… ' + Math.round(job.progress * 100) + '%';
+      }
+    });
+    proc.on('close', code => {
+      if (code === 0) resolve();
+      else {
+        console.error(`[ffmpeg burn] exit ${code}:\n${stderrTail}`);
+        reject(new Error('Burning captions failed: ' + (stderrTail.split('\n').filter(Boolean).pop() || 'ffmpeg error')));
+      }
+    });
+    proc.on('error', e => {
+      console.error(`[ffmpeg burn] spawn error: ${e.message}`);
+      reject(new Error('ffmpeg is unavailable on this server.'));
+    });
+  });
+}
+
+async function processBurnJob(job) {
+  await acquireHeavySlot();
+  try {
+    job.stage = 'processing'; job.message = 'Burning captions';
+    job.workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'burn-'));
+    const assPath = path.join(job.workDir, 'subs.ass');
+    fs.writeFileSync(assPath, job.assText, 'utf8');
+    job.assText = null; // free memory
+    job.duration = await ffprobeDuration(job.inputPath);
+    const base = (job.originalName || 'video').replace(/\.[^.]+$/, '');
+    job.outputName = `${base} - captioned.mp4`;
+    job.outputPath = path.join(job.workDir, 'out.mp4');
+    await burnSubtitles(job, assPath, job.outputPath);
+    try { fs.unlinkSync(job.inputPath); } catch {}
+    job.inputPath = null;
+    job.status = 'done'; job.stage = 'done'; job.message = 'Complete'; job.progress = 1;
+    // Keep the output around for a while so the client can download it, then bin it.
+    setTimeout(() => {
+      try { if (job.workDir) fs.rmSync(job.workDir, { recursive: true, force: true }); } catch {}
+      jobs.delete(job.id);
+    }, 30 * 60 * 1000);
+  } catch (e) {
+    job.status = 'error'; job.stage = 'error'; job.error = e.message || 'Burn failed.';
+    try { if (job.inputPath) fs.unlinkSync(job.inputPath); } catch {}
+    try { if (job.workDir) fs.rmSync(job.workDir, { recursive: true, force: true }); } catch {}
+  } finally {
+    releaseHeavySlot();
+  }
+}
+
+app.post('/api/burn', (req, res, next) => {
+  if (shuttingDown) return res.status(503).json({ error: 'Server is updating — try again in a moment.' });
+  if (!BURN_ENABLED) return res.status(403).json({ error: 'Caption burning is disabled on this server. Connect your own server to burn captions into video.' });
+  upload.fields([{ name: 'file', maxCount: 1 }, { name: 'ass', maxCount: 1 }])(req, res, (err) => {
+    if (err) {
+      if (err.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: `File exceeds max size (${MAX_FILE_SIZE} bytes).` });
+      return res.status(400).json({ error: err.message || 'Upload failed.' });
+    }
+    next();
+  });
+}, async (req, res) => {
+  const videoF = req.files && req.files.file && req.files.file[0];
+  const assF = req.files && req.files.ass && req.files.ass[0];
+  const cleanup = () => {
+    try { if (videoF) fs.unlinkSync(videoF.path); } catch {}
+    try { if (assF) fs.unlinkSync(assF.path); } catch {}
+  };
+  if (!videoF) { cleanup(); return res.status(400).json({ error: 'No video uploaded.' }); }
+  if (!assF) { cleanup(); return res.status(400).json({ error: 'No captions (.ass) provided.' }); }
+  let assText = '';
+  try { assText = fs.readFileSync(assF.path, 'utf8'); } catch {}
+  try { fs.unlinkSync(assF.path); } catch {}
+  if (!assText.trim()) { try { fs.unlinkSync(videoF.path); } catch {} return res.status(400).json({ error: 'Captions file was empty.' }); }
+
+  const jobId = crypto.randomBytes(12).toString('hex');
+  const job = {
+    id: jobId, provider: 'burn', status: 'processing', stage: 'queued',
+    message: 'Queued', progress: 0,
+    transcript: '', utterances: null, segments: null, error: null,
+    duration: null, fileSize: videoF.size, originalName: videoF.originalname,
+    pathTaken: 'burn', inputPath: videoF.path, assText,
+    workDir: null, outputPath: null, outputName: null,
+  };
+  jobs.set(jobId, job);
+  res.json({ jobId });
+  processBurnJob(job).catch(e => { job.status = 'error'; job.stage = 'error'; job.error = e.message || 'Burn failed.'; });
+});
+
+app.get('/api/burn/:id/download', (req, res) => {
+  const job = jobs.get(req.params.id);
+  if (!job || job.pathTaken !== 'burn') return res.status(404).json({ error: 'Not found.' });
+  if (job.status !== 'done' || !job.outputPath || !fs.existsSync(job.outputPath)) {
+    return res.status(409).json({ error: 'Not ready.' });
+  }
+  res.download(job.outputPath, job.outputName || 'captioned.mp4');
 });
 
 // ============================================================================
