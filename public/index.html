@@ -4239,8 +4239,10 @@
             accepts: [['${file.mime}', 'regex', 'video']], error_on_decline: false,
           },
           subtitle_filtered: {
+            // Transloadit sniffs the .ass as text/plain and renames it
+            // captions.txt, so filter on the PRESERVED original_name, not name.
             robot: '/file/filter', use: ':original',
-            accepts: [['${file.name}', 'regex', '\\.ass$']], error_on_decline: false,
+            accepts: [['${file.original_name}', 'regex', '\\.ass$']], error_on_decline: false,
           },
           subtitled: {
             robot: '/video/subtitle',
@@ -4370,10 +4372,10 @@
           throw new Error(data.error || data.message || ('Transloadit job ' + (ok || 'failed') + '.'));
         }
         if (onProgress) {
-          const pct = typeof data.progress_combined === 'number' ? data.progress_combined
-            : (typeof data.bytes_expected === 'number' && data.bytes_expected > 0
-                ? Math.round((data.bytes_received / data.bytes_expected) * 100) : null);
-          onProgress({ phase: 'encode', progress: pct, status: ok });
+          // Only report real encode progress; bytes are already 100% after the
+          // upload, so don't let that masquerade as burn progress.
+          const pct = typeof data.progress_combined === 'number' ? data.progress_combined : null;
+          onProgress({ phase: 'encode', progress: pct, status: ok, message: data.message });
         }
         await new Promise(r => setTimeout(r, intervalMs));
       }
@@ -4394,7 +4396,7 @@
       const setProgress = (text, pct) => {
         $('burnin-progress').classList.remove('hidden');
         $('burnin-status-text').textContent = text;
-        $('burnin-status-fill').style.width = (pct == null ? 0 : Math.max(0, Math.min(100, pct))) + '%';
+        if (pct != null) $('burnin-status-fill').style.width = Math.max(0, Math.min(100, pct)) + '%';
       };
 
       startBtn.addEventListener('click', async () => {
@@ -4433,9 +4435,12 @@
               }
             },
           });
-          setProgress('Burning captions into video…', null);
-          const url = await pollBurnJob(statusUrl, ({ progress }) => {
-            setProgress('Burning captions into video…' + (progress != null ? ' ' + progress + '%' : ''), progress);
+          setProgress('Finalising upload…', null);
+          const url = await pollBurnJob(statusUrl, ({ progress, status, message }) => {
+            const label = status === 'ASSEMBLY_UPLOADING' ? 'Finalising upload…'
+              : status === 'ASSEMBLY_EXECUTING' ? ('Burning captions into video…' + (progress != null ? ' ' + Math.round(progress) + '%' : ''))
+              : (message || 'Processing…');
+            setProgress(label, progress);
           });
           setProgress('Done', 100);
           const dl = $('burnin-download');
