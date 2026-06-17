@@ -3678,7 +3678,42 @@
     // Build SRT/VTT from an explicit array of cues ({start, end, text, speaker}).
     // Split out from the state lookup so the same builders serve both the
     // original transcript (via timedCues) and a translated cue set.
+    // Split long caption cues into short, screen-friendly chunks (~2 lines max),
+    // distributing each cue's time window by character share. Word-level timing
+    // isn't available client-side, so timing is approximate — but it keeps
+    // captions readable instead of dumping a whole speaker turn on screen at
+    // once. The speaker label is kept only on the first chunk of a turn.
+    function segmentCaptionCues(cues, maxChars) {
+      maxChars = maxChars || 84;
+      const out = [];
+      (cues || []).forEach(c => {
+        const text = (c.text || '').toString().replace(/\s+/g, ' ').trim();
+        if (!text) return;
+        const start = c.start || 0;
+        const end = (c.end != null ? c.end : start);
+        if (text.length <= maxChars) { out.push({ start, end, text, speaker: c.speaker }); return; }
+        const words = text.split(' ');
+        const chunks = [];
+        let cur = '';
+        words.forEach(w => {
+          if (cur && (cur.length + 1 + w.length) > maxChars) { chunks.push(cur); cur = w; }
+          else cur = cur ? cur + ' ' + w : w;
+        });
+        if (cur) chunks.push(cur);
+        const totalChars = chunks.reduce((n, s) => n + s.length, 0) || 1;
+        const dur = Math.max(0.001, end - start);
+        let t = start;
+        chunks.forEach((chunk, i) => {
+          const segEnd = (i === chunks.length - 1) ? end : Math.min(end, t + dur * (chunk.length / totalChars));
+          out.push({ start: t, end: segEnd, text: chunk, speaker: i === 0 ? c.speaker : null });
+          t = segEnd;
+        });
+      });
+      return out;
+    }
+
     function cuesToSRT(cues) {
+      cues = segmentCaptionCues(cues);
       if (!Array.isArray(cues) || !cues.length) return '';
       return cues.map((c, i) => {
         const line = c.speaker ? `${c.speaker}: ${c.text}` : c.text;
@@ -3687,6 +3722,7 @@
     }
 
     function cuesToVTT(cues) {
+      cues = segmentCaptionCues(cues);
       if (!Array.isArray(cues) || !cues.length) return '';
       const body = cues.map((c) => {
         const line = c.speaker ? `<v ${c.speaker}>${c.text}` : c.text;
@@ -3730,9 +3766,10 @@
     // get a per-speaker colour and a bold name label; single-speaker cues use the
     // default white-with-outline style. opts.fontSize / opts.font are tunable.
     function cuesToASS(cues, opts = {}) {
-      if (!Array.isArray(cues) || !cues.length) return '';
+      const segs = segmentCaptionCues(cues, opts.maxChars);
+      if (!segs.length) return '';
       const font = opts.font || 'Arial';
-      const fontSize = opts.fontSize || 48;
+      const fontSize = opts.fontSize || 44;
       const head = [
         '[Script Info]',
         'ScriptType: v4.00+',
@@ -3743,21 +3780,24 @@
         '',
         '[V4+ Styles]',
         'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-        `Style: Default,${font},${fontSize},&H00FFFFFF,&H000000FF,&H00000000,&H64000000,0,0,0,0,100,100,0,0,1,3,1,2,80,80,60,1`,
+        // White bold text, thin black outline, NO opaque box (BorderStyle 1) and
+        // no shadow, bottom-centre, wide side margins so each line stays short.
+        `Style: Default,${font},${fontSize},&H00FFFFFF,&H000000FF,&H00000000,&H00000000,1,0,0,0,100,100,0,0,1,2.4,0,2,160,160,90,1`,
         '',
         '[Events]',
         'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
       ];
       const speakerColor = {};
       let nextColor = 0;
-      const events = cues.map(c => {
+      const events = segs.map(c => {
         const start = fmtAssTime(c.start);
         const end = fmtAssTime(c.end);
         const text = assEscape(c.text);
         if (c.speaker) {
           if (!(c.speaker in speakerColor)) speakerColor[c.speaker] = speakerColorBgr(nextColor++);
           const name = assEscape(c.speaker).replace(/\\N/g, ' ');
-          return `Dialogue: 0,${start},${end},Default,,0,0,0,,{\\c&H${speakerColor[c.speaker]}&\\b1}${name}: {\\b0}${text}`;
+          // Colour only the speaker name, then \r resets to white for the words.
+          return `Dialogue: 0,${start},${end},Default,,0,0,0,,{\\c&H${speakerColor[c.speaker]}&}${name}:{\\r} ${text}`;
         }
         return `Dialogue: 0,${start},${end},Default,,0,0,0,,${text}`;
       });
