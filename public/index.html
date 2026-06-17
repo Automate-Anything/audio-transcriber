@@ -2027,6 +2027,12 @@
           <div class="key-help">
             Saved in this browser only. Wiped from server memory after each request. <strong>Note:</strong> AssemblyAI processes the audio on their cloud to do speaker separation. Their data retention policy applies.
           </div>
+          <div class="key-help" style="margin-top: 0.6rem;">
+            <label style="display:flex; align-items:center; gap:0.5rem; flex-wrap:wrap;">
+              <span>Number of speakers (optional — improves who-said-what accuracy):</span>
+              <input id="aai-speakers" type="number" min="1" max="10" placeholder="auto" inputmode="numeric" style="width:72px;">
+            </label>
+          </div>
         </div>
       </div>
 
@@ -2685,6 +2691,7 @@
       keyterms: '',          // optional comma-separated vocabulary hints
       codeSwitching: false,  // recording has multiple languages (code-switching)
       csLanguages: [],       // optional named languages present (prompt hints)
+      speakersExpected: null,// optional expected speaker count (AssemblyAI diarization)
       segments: null,        // [{start,end,text}] Whisper timestamps
       showConfidence: false, // toggle: highlight low-confidence words
       editing: false,        // in-place transcript editing mode
@@ -2901,6 +2908,7 @@
         // single language even if one is selected in the (dimmed) picker.
         if (language && !state.codeSwitching) form.append('language', language);
         if (state.keyterms) form.append('keyterms', state.keyterms);
+        if (state.speakersExpected) form.append('speakersExpected', String(state.speakersExpected));
         if (state.codeSwitching) {
           form.append('codeSwitching', '1');
           if (state.csLanguages.length) form.append('languages', state.csLanguages.join(','));
@@ -4875,6 +4883,13 @@
       });
       return { showSaved, showEdit };
     })();
+
+    // Expected-speaker count (AssemblyAI diarization hint).
+    const aaiSpeakersInput = $('aai-speakers');
+    if (aaiSpeakersInput) aaiSpeakersInput.addEventListener('input', () => {
+      const n = parseInt(aaiSpeakersInput.value, 10);
+      state.speakersExpected = (Number.isFinite(n) && n >= 1 && n <= 10) ? n : null;
+    });
 
     // ============================================================================
     // Recording type picker wiring

@@ -523,12 +523,14 @@ app.post('/api/transcribe-url', express.json({ limit: '8kb' }), async (req, res)
 function parseTranscribeOptions(body) {
   body = body || {};
   const rawLang = (body.language || '').toString().trim().toLowerCase();
+  const sx = parseInt(body.speakersExpected, 10);
   return {
     provider: (body.provider || 'openai').toString().toLowerCase(),
     language: /^[a-z]{2}(_[a-z]{2})?$/.test(rawLang) ? rawLang : '',
     keyterms: (body.keyterms || '').toString().trim().slice(0, 800),
     codeSwitching: body.codeSwitching === '1' || body.codeSwitching === true || body.codeSwitching === 'true',
     csLanguages: (body.languages || '').toString().trim().slice(0, 200),
+    speakersExpected: (Number.isFinite(sx) && sx >= 1 && sx <= 10) ? sx : null,
   };
 }
 
@@ -537,7 +539,7 @@ function parseTranscribeOptions(body) {
 // cleans up the temp file. Used directly by the MCP tools and (via the thin
 // HTTP wrapper below) by the REST endpoints.
 function createTranscriptionJob(fileInfo, apiKey, opts) {
-  const { provider, language, keyterms, codeSwitching, csLanguages } = opts;
+  const { provider, language, keyterms, codeSwitching, csLanguages, speakersExpected } = opts;
   const fail = (status, message) => {
     try { fs.unlinkSync(fileInfo.path); } catch {}
     const e = new Error(message); e.status = status; throw e;
@@ -545,7 +547,7 @@ function createTranscriptionJob(fileInfo, apiKey, opts) {
 
   if (provider === 'assemblyai') {
     if (!apiKey || apiKey.length < 20) fail(401, "That key doesn't look right for AssemblyAI.");
-    return startAssemblyJob(fileInfo, apiKey, language, keyterms, codeSwitching, csLanguages);
+    return startAssemblyJob(fileInfo, apiKey, language, keyterms, codeSwitching, csLanguages, speakersExpected);
   }
 
   if (!apiKey || !apiKey.startsWith('sk-') || apiKey.length < 20) {
@@ -605,7 +607,7 @@ function dispatchTranscription(res, fileInfo, apiKey, opts) {
 // Flow: upload bytes -> submit transcript with speaker_labels -> poll until done.
 // ============================================================================
 
-function startAssemblyJob(fileInfo, apiKey, language, keyterms, codeSwitching, csLanguages) {
+function startAssemblyJob(fileInfo, apiKey, language, keyterms, codeSwitching, csLanguages, speakersExpected) {
   const jobId = crypto.randomBytes(12).toString('hex');
   const job = {
     id: jobId,
@@ -627,6 +629,7 @@ function startAssemblyJob(fileInfo, apiKey, language, keyterms, codeSwitching, c
     language: language || '',
     keyterms: keyterms || '',
     codeSwitching: !!codeSwitching,
+    speakersExpected: speakersExpected || null,
     csLanguages: csLanguages || '',
     createdAt: Date.now(),
     apiKey,
@@ -686,6 +689,7 @@ async function processAssemblyJob(job) {
     punctuate: true,
     format_text: true,
   };
+  if (job.speakersExpected) submitBody.speakers_expected = job.speakersExpected;
   if (job.codeSwitching) {
     // Code-switching mode: rely on detection (never a pinned language) and
     // tell Universal-3 Pro to preserve the spoken language mix. The exact
@@ -920,6 +924,32 @@ app.post('/api/assembly/reattach', express.json({ limit: '64kb' }), (req, res) =
 // ============================================================================
 const POST_PROCESS_MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1'];
 
+// Translate one batch of caption cues into `lang`, preserving order and count.
+// Returns an array of the same length, or null if the model broke alignment.
+async function translateCueBatch(client, model, lang, items) {
+  try {
+    const completion = await client.chat.completions.create({
+      model,
+      messages: [
+        { role: 'system', content:
+          `You are a subtitle translator. The user sends a JSON object {"cues":[...]}, an ordered array of transcript lines. ` +
+          `Translate every line into ${lang} and return a JSON object {"translations":[...]} whose array has EXACTLY the same number of items, in the same order, ` +
+          `each the ${lang} translation of the line at the same index. Use the surrounding lines for context, but do NOT merge, split, reorder, add, or drop items. ` +
+          `If a line has no translatable content, return it unchanged. Keep speaker names and proper nouns. Output only the JSON object.` },
+        { role: 'user', content: JSON.stringify({ cues: items }) },
+      ],
+      response_format: { type: 'json_object' },
+      max_tokens: 16000,
+      temperature: 0,
+      seed: 1234,
+    });
+    let parsed = {};
+    try { parsed = JSON.parse(completion.choices[0].message.content || '{}'); } catch {}
+    const arr = Array.isArray(parsed.translations) ? parsed.translations : null;
+    return (arr && arr.length === items.length) ? arr.map(s => (s == null ? '' : s.toString())) : null;
+  } catch { return null; }
+}
+
 // Core summary / action-items / translation logic. Returns a result object.
 // Throws Error on failure. Shared by the REST route and the MCP tool.
 async function runPostProcess(apiKey, { transcript, tasks, targetLanguage, model, cues }) {
@@ -982,50 +1012,41 @@ async function runPostProcess(apiKey, { transcript, tasks, targetLanguage, model
 
   if (tasks.includes('translate')) {
     const lang = targetLanguage || 'English';
-
-    // Cue-aligned translation: when the client sends per-cue texts (one string
-    // per transcript segment/utterance), translate them line-by-line so each
-    // translated line keeps its original timestamp. This is what makes a
-    // *translated* caption file (.srt/.vtt) possible. We keep all cues in one
-    // request so the model still sees full context, and demand a same-length
-    // JSON array back. If cues are absent — or the model breaks alignment — we
-    // fall back to translating the whole transcript as one blob (no captions).
     const cueArr = Array.isArray(cues)
       ? cues.map(c => (c == null ? '' : c.toString()))
       : null;
-    const cueChars = cueArr ? cueArr.reduce((n, s) => n + s.length, 0) : 0;
-    let aligned = false;
 
-    if (cueArr && cueArr.length && cueArr.length <= 500 && cueChars <= 40000) {
-      try {
-        const completion = await client.chat.completions.create({
-          model,
-          messages: [
-            { role: 'system', content:
-              `You are a subtitle translator. The user sends a JSON object {"cues":[...]}, an ordered array of transcript lines. ` +
-              `Translate every line into ${lang} and return a JSON object {"translations":[...]} whose array has EXACTLY the same number of items, in the same order, ` +
-              `each the ${lang} translation of the line at the same index. Use the surrounding lines for context, but do NOT merge, split, reorder, add, or drop items. ` +
-              `If a line has no translatable content, return it unchanged. Keep speaker names and proper nouns. Output only the JSON object.` },
-            { role: 'user', content: JSON.stringify({ cues: cueArr }) },
-          ],
-          response_format: { type: 'json_object' },
-          max_tokens: 16000,
-          temperature: 0,
-          seed: 1234,
-        });
-        let parsed = {};
-        try { parsed = JSON.parse(completion.choices[0].message.content || '{}'); } catch {}
-        const arr = Array.isArray(parsed.translations) ? parsed.translations : null;
-        if (arr && arr.length === cueArr.length) {
-          result.translationCues = arr.map(s => (s == null ? '' : s.toString()));
-          result.translation = result.translationCues.join('\n');
-          result.translationLanguage = lang;
-          aligned = true;
+    if (cueArr && cueArr.length) {
+      // Cue-aligned translation IN BATCHES so it scales to long videos (an hour+
+      // transcript exceeds a single request's output budget). Each batch is
+      // translated independently with a same-length JSON array demanded, then
+      // stitched back by index. A batch that breaks alignment even after a retry
+      // keeps its ORIGINAL text, so timing/captions are still produced rather
+      // than failing the whole translation.
+      const BATCH_CUES = 120, BATCH_CHARS = 12000;
+      const batches = [];
+      let cur = [], curChars = 0, curStart = 0;
+      for (let i = 0; i < cueArr.length; i++) {
+        cur.push(cueArr[i]); curChars += cueArr[i].length;
+        if (cur.length >= BATCH_CUES || curChars >= BATCH_CHARS) {
+          batches.push({ start: curStart, items: cur }); curStart = i + 1; cur = []; curChars = 0;
         }
-      } catch { /* fall through to whole-transcript translation */ }
-    }
+      }
+      if (cur.length) batches.push({ start: curStart, items: cur });
 
-    if (!aligned) {
+      const translated = new Array(cueArr.length);
+      for (const b of batches) {
+        let out = await translateCueBatch(client, model, lang, b.items);
+        if (!out) out = await translateCueBatch(client, model, lang, b.items); // one retry
+        for (let j = 0; j < b.items.length; j++) {
+          translated[b.start + j] = (out && out[j] != null) ? out[j] : b.items[j];
+        }
+      }
+      result.translationCues = translated.map(s => (s == null ? '' : s.toString()));
+      result.translation = result.translationCues.join('\n');
+      result.translationLanguage = lang;
+    } else {
+      // No per-cue input: translate the whole transcript as one blob (no captions).
       const completion = await client.chat.completions.create({
         model,
         messages: [
