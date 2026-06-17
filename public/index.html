@@ -4271,35 +4271,75 @@
     // Sign + create a burn-in assembly and upload the video + ASS in one POST.
     // onProgress({phase:'upload', loaded, total}) reports upload bytes.
     // Resolves to the assembly status URL (poll it with pollBurnJob).
+    // Create the assembly FIRST (instant, tiny request — so param errors surface
+    // immediately), then upload the subtitle + video via tus resumable uploads.
+    // tus is Transloadit's CORS-friendly browser path and survives flaky
+    // connections, which a direct multipart POST of a multi-GB video does not.
     async function createBurnJob({ videoFile, assText, onProgress }) {
       if (!state.transloaditKey || !state.transloaditSecret) throw new Error('Add your Transloadit credentials first.');
       if (!videoFile) throw new Error('No video to caption.');
       if (!assText || !assText.trim()) throw new Error('No captions to burn in.');
+
       const { params, signature } = await signAssembly(buildBurnAssembly(), state.transloaditKey, state.transloaditSecret);
+
+      // Stage 1: create the assembly without file bytes.
       const fd = new FormData();
       fd.append('params', params);
       fd.append('signature', signature);
-      fd.append('subtitles', assToBlob(assText), 'captions.ass');
-      fd.append('video', videoFile, videoFile.name || 'video.mp4');
-      return await new Promise((resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', TL_API + '/assemblies');
-        xhr.upload.onprogress = (e) => {
-          if (onProgress && e.lengthComputable) onProgress({ phase: 'upload', loaded: e.loaded, total: e.total });
-        };
-        xhr.onload = () => {
-          let data = {};
-          try { data = JSON.parse(xhr.responseText); } catch {}
-          if (xhr.status >= 200 && xhr.status < 300 && data.assembly_ssl_url && !data.error) {
-            try { localStorage.setItem(TL_JOB_STORAGE, JSON.stringify({ url: data.assembly_ssl_url, id: data.assembly_id, name: videoFile.name || '' })); } catch {}
-            resolve(data.assembly_ssl_url);
-          } else {
-            reject(new Error(data.message || data.error || ('Transloadit error (HTTP ' + xhr.status + ').')));
-          }
-        };
-        xhr.onerror = () => reject(new Error('Network error uploading to Transloadit.'));
-        xhr.send(fd);
+      fd.append('num_expected_upload_files', '2');
+      const createRes = await fetch(TL_API + '/assemblies', { method: 'POST', body: fd });
+      let created = {};
+      try { created = await createRes.json(); } catch {}
+      if (!createRes.ok || !created.assembly_ssl_url || created.error) {
+        throw new Error(created.message || created.error || ('Could not create the Transloadit job (HTTP ' + createRes.status + ').'));
+      }
+      const assemblyUrl = created.assembly_ssl_url;
+      const tusUrl = created.tus_url;
+      if (!tusUrl) throw new Error('Transloadit did not return a resumable-upload URL.');
+      try { localStorage.setItem(TL_JOB_STORAGE, JSON.stringify({ url: assemblyUrl, id: created.assembly_id, name: videoFile.name || '' })); } catch {}
+
+      // Stage 2: tus-upload the subtitle (tiny) then the video, reporting
+      // combined byte progress.
+      const subs = assToBlob(assText);
+      const total = subs.size + videoFile.size;
+      let base = 0;
+      await tusUpload(tusUrl, subs, { assembly_url: assemblyUrl, filename: 'captions.ass', fieldname: 'subtitles' },
+        (sent) => onProgress && onProgress({ phase: 'upload', loaded: base + sent, total }));
+      base += subs.size;
+      await tusUpload(tusUrl, videoFile, { assembly_url: assemblyUrl, filename: videoFile.name || 'video.mp4', fieldname: 'video' },
+        (sent) => onProgress && onProgress({ phase: 'upload', loaded: base + sent, total }));
+
+      return assemblyUrl;
+    }
+
+    // Minimal tus 1.0.0 client: create the upload with base64 metadata, then
+    // PATCH the file in 8 MB chunks (resumable-friendly + coarse progress).
+    async function tusUpload(tusBaseUrl, file, metadata, onSent) {
+      const b64 = (s) => btoa(unescape(encodeURIComponent(s)));
+      const metaHeader = Object.keys(metadata).map(k => k + ' ' + b64(String(metadata[k]))).join(',');
+      const createRes = await fetch(tusBaseUrl, {
+        method: 'POST',
+        headers: { 'Tus-Resumable': '1.0.0', 'Upload-Length': String(file.size), 'Upload-Metadata': metaHeader },
       });
+      if (createRes.status !== 201) throw new Error('Upload could not start (tus ' + createRes.status + ').');
+      const location = createRes.headers.get('Location');
+      if (!location) throw new Error('Upload start returned no location (CORS may be blocking the Location header).');
+      const uploadUrl = new URL(location, tusBaseUrl).href;
+
+      const CHUNK = 8 * 1024 * 1024; // 8 MB
+      let offset = 0;
+      while (offset < file.size) {
+        const end = Math.min(offset + CHUNK, file.size);
+        const patchRes = await fetch(uploadUrl, {
+          method: 'PATCH',
+          headers: { 'Tus-Resumable': '1.0.0', 'Upload-Offset': String(offset), 'Content-Type': 'application/offset+octet-stream' },
+          body: file.slice(offset, end),
+        });
+        if (patchRes.status !== 204) throw new Error('Upload chunk failed (tus ' + patchRes.status + ').');
+        const next = parseInt(patchRes.headers.get('Upload-Offset') || String(end), 10);
+        offset = isFinite(next) ? next : end;
+        if (onSent) onSent(offset);
+      }
     }
 
     // Pull the finished file's URL from an assembly result: prefer the served
