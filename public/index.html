@@ -4166,12 +4166,21 @@
              `${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}:${p2(d.getUTCSeconds())}+00:00`;
     }
 
+    // A random per-request nonce — recommended by Transloadit to prevent
+    // duplicate processing if a request is retried.
+    function tlNonce() {
+      if (typeof crypto !== 'undefined' && crypto.randomUUID) return crypto.randomUUID();
+      const a = new Uint8Array(16); crypto.getRandomValues(a);
+      return Array.from(a).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
     // Sign assembly params. Returns { params, signature } ready to POST as form
-    // fields. `expires` is injectable so the result is deterministic in tests.
-    async function signAssembly(paramsObj, authKey, secret, expires) {
+    // fields. `expires`/`nonce` are injectable so the result is deterministic in
+    // tests.
+    async function signAssembly(paramsObj, authKey, secret, expires, nonce) {
       const params = JSON.stringify({
         ...paramsObj,
-        auth: { key: authKey, expires: expires || tlExpires(60) },
+        auth: { key: authKey, expires: expires || tlExpires(60), nonce: nonce || tlNonce() },
       });
       const signature = 'sha384:' + await hmacSha384Hex(secret, params);
       return { params, signature };
@@ -4197,6 +4206,93 @@
           exported: { robot: '/file/serve', use: 'burned' },
         },
       };
+    }
+
+    // ---- Phase C: upload + run + poll ----------------------------------------
+    // NOTE: the network flow below is untested until a live Transloadit account
+    // exists. Field routing (video/subtitles), progress fields, and the result
+    // shape are verified against the real API during Phase C testing.
+    const TL_API = 'https://api2.transloadit.com';
+    const TL_JOB_STORAGE = 'transloadit_active_job';
+
+    function assToBlob(assText) {
+      return new Blob([assText], { type: 'text/x-ssa;charset=utf-8' });
+    }
+
+    // Sign + create a burn-in assembly and upload the video + ASS in one POST.
+    // onProgress({phase:'upload', loaded, total}) reports upload bytes.
+    // Resolves to the assembly status URL (poll it with pollBurnJob).
+    async function createBurnJob({ videoFile, assText, onProgress }) {
+      if (!state.transloaditKey || !state.transloaditSecret) throw new Error('Add your Transloadit credentials first.');
+      if (!videoFile) throw new Error('No video to caption.');
+      if (!assText || !assText.trim()) throw new Error('No captions to burn in.');
+      const { params, signature } = await signAssembly(buildBurnAssembly(), state.transloaditKey, state.transloaditSecret);
+      const fd = new FormData();
+      fd.append('params', params);
+      fd.append('signature', signature);
+      fd.append('subtitles', assToBlob(assText), 'captions.ass');
+      fd.append('video', videoFile, videoFile.name || 'video.mp4');
+      return await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', TL_API + '/assemblies');
+        xhr.upload.onprogress = (e) => {
+          if (onProgress && e.lengthComputable) onProgress({ phase: 'upload', loaded: e.loaded, total: e.total });
+        };
+        xhr.onload = () => {
+          let data = {};
+          try { data = JSON.parse(xhr.responseText); } catch {}
+          if (xhr.status >= 200 && xhr.status < 300 && data.assembly_ssl_url) {
+            try { localStorage.setItem(TL_JOB_STORAGE, JSON.stringify({ url: data.assembly_ssl_url, id: data.assembly_id, name: videoFile.name || '' })); } catch {}
+            resolve(data.assembly_ssl_url);
+          } else {
+            reject(new Error(data.error || data.message || ('Transloadit error (HTTP ' + xhr.status + ').')));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Network error uploading to Transloadit.'));
+        xhr.send(fd);
+      });
+    }
+
+    // Pull the finished file's URL from an assembly result: prefer the served
+    // export step, fall back to the burn step.
+    function burnResultUrl(data) {
+      const r = (data && data.results) || {};
+      const pick = (arr) => (Array.isArray(arr) && arr.length) ? (arr[0].ssl_url || arr[0].url) : null;
+      return pick(r.exported) || pick(r.burned) || null;
+    }
+
+    // Poll an assembly until it completes. onProgress({phase:'encode', progress})
+    // where progress is 0..100 or null (indeterminate). Resolves to the burned
+    // video's URL; rejects on Transloadit error/cancel.
+    async function pollBurnJob(statusUrl, onProgress, opts = {}) {
+      const intervalMs = opts.intervalMs || 3000;
+      for (;;) {
+        const res = await fetch(statusUrl, { cache: 'no-store' });
+        const data = await res.json();
+        const ok = data.ok || '';
+        if (ok === 'ASSEMBLY_COMPLETED') {
+          const url = burnResultUrl(data);
+          if (!url) throw new Error('Transloadit finished but returned no output file.');
+          try { localStorage.removeItem(TL_JOB_STORAGE); } catch {}
+          return url;
+        }
+        if (data.error || /CANCEL|FAIL|ABORT|REJECT/.test(ok)) {
+          try { localStorage.removeItem(TL_JOB_STORAGE); } catch {}
+          throw new Error(data.error || data.message || ('Transloadit job ' + (ok || 'failed') + '.'));
+        }
+        if (onProgress) {
+          const pct = typeof data.progress_combined === 'number' ? data.progress_combined
+            : (typeof data.bytes_expected === 'number' && data.bytes_expected > 0
+                ? Math.round((data.bytes_received / data.bytes_expected) * 100) : null);
+          onProgress({ phase: 'encode', progress: pct, status: ok });
+        }
+        await new Promise(r => setTimeout(r, intervalMs));
+      }
+    }
+
+    // A burn job persisted by createBurnJob, if one was in flight (for resume).
+    function resumeBurnJob() {
+      try { return JSON.parse(localStorage.getItem(TL_JOB_STORAGE) || 'null'); } catch { return null; }
     }
 
     $('history-clear').addEventListener('click', () => {
