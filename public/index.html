@@ -2030,6 +2030,42 @@
         </div>
       </div>
 
+      <!-- API key panel: Transloadit (video caption burn-in). Hidden until the
+           burn-in flow surfaces it in Phase D. -->
+      <div id="key-panel-transloadit" class="panel key-provider-panel hidden" style="margin-bottom: 1rem;">
+        <div class="key-panel">
+          <div class="key-header">
+            <div class="key-label mono-sm">Transloadit credentials</div>
+            <a class="get-key-btn" href="https://transloadit.com/c/signup/" target="_blank" rel="noopener noreferrer">
+              Get Key <span class="ext-icon" aria-hidden="true">↗</span>
+            </a>
+          </div>
+          <div id="tl-key-edit-mode">
+            <div class="key-input-wrap">
+              <input id="tl-auth-key" class="key-input" type="text" placeholder="Auth Key" autocomplete="off" spellcheck="false" autocapitalize="off">
+            </div>
+            <div class="key-input-wrap" style="margin-top: 0.5rem;">
+              <input id="tl-auth-secret" class="key-input" type="password" placeholder="Auth Secret" autocomplete="off" spellcheck="false" autocapitalize="off">
+              <button id="tl-reveal" class="reveal-btn" type="button">Show</button>
+            </div>
+            <div class="key-actions">
+              <button id="tl-save-key" class="btn primary">Save</button>
+              <div id="tl-key-error" class="err-inline hidden"></div>
+            </div>
+          </div>
+          <div id="tl-key-saved-mode" class="hidden">
+            <div class="key-saved-line">
+              <span class="check">✓</span>
+              <span class="key-preview" id="tl-key-preview"></span>
+              <button id="tl-clear-key" class="reveal-btn" type="button">Change</button>
+            </div>
+          </div>
+          <div class="key-help">
+            Saved in this browser only and used to sign your video jobs. You bring your own Transloadit account, so you control the bill. Burning captions re-encodes the whole video on Transloadit.
+          </div>
+        </div>
+      </div>
+
       <!-- Dropzone -->
       <label id="dropzone" class="dropzone">
         <input id="file-input" class="dz-input" type="file" accept="audio/*,video/*,.flac,.aiff,.aif,.amr,.wma,.m4b,.aac,.opus,.oga,.mka,.mkv,.avi,.flv,.wmv,.m4v,.3gp,.ts,.caf,.ac3" multiple aria-label="Choose audio or video files">
@@ -2584,6 +2620,8 @@
     // ============================================================================
     const KEY_STORAGE = 'openai_api_key';
     const AAI_KEY_STORAGE = 'assemblyai_api_key';
+    const TL_KEY_STORAGE = 'transloadit_auth_key';
+    const TL_SECRET_STORAGE = 'transloadit_auth_secret';
     const REC_TYPE_STORAGE = 'recording_type';
     const LANG_STORAGE = 'audio_language';
     const KEYTERMS_STORAGE = 'keyterms';
@@ -2616,6 +2654,8 @@
     const state = {
       openaiKey: '',
       assemblyKey: '',
+      transloaditKey: '',
+      transloaditSecret: '',
       recType: 'single',     // 'single' (OpenAI Whisper) | 'multi' (AssemblyAI)
       language: '',          // ISO 639-1 code, e.g. 'he', 'en'; empty = auto-detect
       keyterms: '',          // optional comma-separated vocabulary hints
@@ -4101,6 +4141,64 @@
     $('ai-translation-vtt').addEventListener('click', () => downloadTranslatedCaption('vtt'));
     $('ai-translation-ass').addEventListener('click', () => downloadTranslatedCaption('ass'));
 
+    // ============================================================================
+    // Video caption burn-in (Transloadit, BYOK) — Phase B: signing + assembly
+    // ============================================================================
+    // Transloadit jobs are authenticated by signing the JSON params with the
+    // user's Auth Secret (HMAC-SHA384). We sign in the browser via Web Crypto so
+    // the secret stays client-side, consistent with the app's BYOK model. The
+    // signed params + signature get POSTed to Transloadit alongside the uploaded
+    // video + the styled ASS subtitle (Phase C).
+
+    async function hmacSha384Hex(secret, message) {
+      const enc = new TextEncoder();
+      const key = await crypto.subtle.importKey(
+        'raw', enc.encode(secret), { name: 'HMAC', hash: 'SHA-384' }, false, ['sign']);
+      const sig = await crypto.subtle.sign('HMAC', key, enc.encode(message));
+      return Array.from(new Uint8Array(sig)).map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    // Transloadit expects the expiry as "YYYY/MM/DD HH:MM:SS+00:00" (UTC).
+    function tlExpires(minutesAhead = 60) {
+      const d = new Date(Date.now() + minutesAhead * 60000);
+      const p2 = n => String(n).padStart(2, '0');
+      return `${d.getUTCFullYear()}/${p2(d.getUTCMonth() + 1)}/${p2(d.getUTCDate())} ` +
+             `${p2(d.getUTCHours())}:${p2(d.getUTCMinutes())}:${p2(d.getUTCSeconds())}+00:00`;
+    }
+
+    // Sign assembly params. Returns { params, signature } ready to POST as form
+    // fields. `expires` is injectable so the result is deterministic in tests.
+    async function signAssembly(paramsObj, authKey, secret, expires) {
+      const params = JSON.stringify({
+        ...paramsObj,
+        auth: { key: authKey, expires: expires || tlExpires(60) },
+      });
+      const signature = 'sha384:' + await hmacSha384Hex(secret, params);
+      return { params, signature };
+    }
+
+    // The burn-in Assembly: take the uploaded video + the uploaded ASS subtitle
+    // and hard-burn the subtitle onto the video (full re-encode), then serve the
+    // result. Field routing (video vs subtitles) is finalised in Phase C against
+    // the live Transloadit API; the structure is asserted in unit tests.
+    function buildBurnAssembly() {
+      return {
+        steps: {
+          ':original': { robot: '/upload/handle', fields: ['video'] },
+          subs: { robot: '/upload/handle', fields: ['subtitles'] },
+          burned: {
+            robot: '/video/subtitle',
+            use: { steps: [{ name: ':original', as: 'video' }, { name: 'subs', as: 'subtitles' }] },
+            subtitles_type: 'burned',
+            preset: 'empty',
+            ffmpeg_stack: 'v6',
+            ffmpeg: { 'c:v': 'libx264', 'crf': 20, 'c:a': 'aac', 'b:a': '128k' },
+          },
+          exported: { robot: '/file/serve', use: 'burned' },
+        },
+      };
+    }
+
     $('history-clear').addEventListener('click', () => {
       if (confirm('Clear all saved transcripts? This cannot be undone.')) {
         try { localStorage.removeItem(HISTORY_STORAGE); } catch {}
@@ -4442,6 +4540,43 @@
       },
       onChange: (v) => { state.assemblyKey = v; },
     });
+
+    // Transloadit has two fields (Auth Key + Secret), so it gets a small bespoke
+    // panel rather than wireKeyPanel (which is single-field).
+    const transloaditUI = (function () {
+      const $k = $('tl-auth-key'), $s = $('tl-auth-secret');
+      const showSaved = () => {
+        $('tl-key-edit-mode').classList.add('hidden');
+        $('tl-key-saved-mode').classList.remove('hidden');
+        $('tl-key-preview').textContent = state.transloaditKey
+          ? state.transloaditKey.slice(0, 6) + '…' : 'saved';
+      };
+      const showEdit = () => {
+        $('tl-key-saved-mode').classList.add('hidden');
+        $('tl-key-edit-mode').classList.remove('hidden');
+      };
+      $('tl-reveal').addEventListener('click', () => {
+        const showing = $s.type === 'text';
+        $s.type = showing ? 'password' : 'text';
+        $('tl-reveal').textContent = showing ? 'Show' : 'Hide';
+      });
+      $('tl-save-key').addEventListener('click', () => {
+        const k = $k.value.trim(), s = $s.value.trim();
+        const $err = $('tl-key-error');
+        if (!k || !s) { $err.textContent = 'Enter both your Auth Key and Auth Secret.'; $err.classList.remove('hidden'); return; }
+        $err.classList.add('hidden');
+        state.transloaditKey = k; state.transloaditSecret = s;
+        try { localStorage.setItem(TL_KEY_STORAGE, k); localStorage.setItem(TL_SECRET_STORAGE, s); } catch {}
+        showSaved();
+      });
+      $('tl-clear-key').addEventListener('click', () => {
+        state.transloaditKey = ''; state.transloaditSecret = '';
+        try { localStorage.removeItem(TL_KEY_STORAGE); localStorage.removeItem(TL_SECRET_STORAGE); } catch {}
+        $k.value = ''; $s.value = ''; $s.type = 'password'; $('tl-reveal').textContent = 'Show';
+        showEdit();
+      });
+      return { showSaved, showEdit };
+    })();
 
     // ============================================================================
     // Recording type picker wiring
@@ -5473,6 +5608,13 @@
     try {
       const savedAaiKey = localStorage.getItem(AAI_KEY_STORAGE);
       if (savedAaiKey) { state.assemblyKey = savedAaiKey; assemblyKeyUI.showSaved(savedAaiKey); }
+
+      const savedTlKey = localStorage.getItem(TL_KEY_STORAGE);
+      const savedTlSecret = localStorage.getItem(TL_SECRET_STORAGE);
+      if (savedTlKey && savedTlSecret) {
+        state.transloaditKey = savedTlKey; state.transloaditSecret = savedTlSecret;
+        transloaditUI.showSaved();
+      }
     } catch {}
     try {
       const savedType = localStorage.getItem(REC_TYPE_STORAGE);
