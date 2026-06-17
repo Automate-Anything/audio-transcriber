@@ -2030,42 +2030,6 @@
         </div>
       </div>
 
-      <!-- API key panel: Transloadit (video caption burn-in). Hidden until the
-           burn-in flow surfaces it in Phase D. -->
-      <div id="key-panel-transloadit" class="panel key-provider-panel hidden" style="margin-bottom: 1rem;">
-        <div class="key-panel">
-          <div class="key-header">
-            <div class="key-label mono-sm">Transloadit credentials</div>
-            <a class="get-key-btn" href="https://transloadit.com/c/signup/" target="_blank" rel="noopener noreferrer">
-              Get Key <span class="ext-icon" aria-hidden="true">↗</span>
-            </a>
-          </div>
-          <div id="tl-key-edit-mode">
-            <div class="key-input-wrap">
-              <input id="tl-auth-key" class="key-input" type="text" placeholder="Auth Key" autocomplete="off" spellcheck="false" autocapitalize="off">
-            </div>
-            <div class="key-input-wrap" style="margin-top: 0.5rem;">
-              <input id="tl-auth-secret" class="key-input" type="password" placeholder="Auth Secret" autocomplete="off" spellcheck="false" autocapitalize="off">
-              <button id="tl-reveal" class="reveal-btn" type="button">Show</button>
-            </div>
-            <div class="key-actions">
-              <button id="tl-save-key" class="btn primary">Save</button>
-              <div id="tl-key-error" class="err-inline hidden"></div>
-            </div>
-          </div>
-          <div id="tl-key-saved-mode" class="hidden">
-            <div class="key-saved-line">
-              <span class="check">✓</span>
-              <span class="key-preview" id="tl-key-preview"></span>
-              <button id="tl-clear-key" class="reveal-btn" type="button">Change</button>
-            </div>
-          </div>
-          <div class="key-help">
-            Saved in this browser only and used to sign your video jobs. You bring your own Transloadit account, so you control the bill. Burning captions re-encodes the whole video on Transloadit.
-          </div>
-        </div>
-      </div>
-
       <!-- Dropzone -->
       <label id="dropzone" class="dropzone">
         <input id="file-input" class="dz-input" type="file" accept="audio/*,video/*,.flac,.aiff,.aif,.amr,.wma,.m4b,.aac,.opus,.oga,.mka,.mkv,.avi,.flv,.wmv,.m4v,.3gp,.ts,.caf,.ac3" multiple aria-label="Choose audio or video files">
@@ -2383,6 +2347,66 @@
               </div>
             </div>
             <p id="ai-translation-text" class="ai-block-text"></p>
+          </div>
+        </div>
+
+        <!-- Burn captions into video (Transloadit, BYOK). Shown for completed
+             video transcripts that have timestamps + the original File. -->
+        <div id="burnin-block" class="ai-block hidden">
+          <div class="ai-block-head">
+            <span class="mono-sm">Burn captions into video</span>
+          </div>
+          <p class="ai-extras-note" style="margin-bottom: 0.6rem;">Render the captions permanently onto your video. Re-encoded on Transloadit using your own account — long/large videos are billed to you.</p>
+          <div style="display:flex; gap:1.2rem; flex-wrap:wrap; margin:0.4rem 0 0.7rem;">
+            <label style="display:inline-flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="radio" name="burnin-src" id="burnin-src-original" value="original" checked> Original captions</label>
+            <label id="burnin-src-translated-wrap" class="hidden" style="display:inline-flex; align-items:center; gap:0.4rem; cursor:pointer;"><input type="radio" name="burnin-src" id="burnin-src-translated" value="translated"> Translated captions</label>
+          </div>
+
+          <!-- Transloadit credentials (BYOK) — used to sign your video jobs. -->
+          <div id="key-panel-transloadit" class="panel key-provider-panel" style="margin-bottom: 0.8rem;">
+            <div class="key-panel">
+              <div class="key-header">
+                <div class="key-label mono-sm">Transloadit credentials</div>
+                <a class="get-key-btn" href="https://transloadit.com/c/signup/" target="_blank" rel="noopener noreferrer">
+                  Get Key <span class="ext-icon" aria-hidden="true">↗</span>
+                </a>
+              </div>
+              <div id="tl-key-edit-mode">
+                <div class="key-input-wrap">
+                  <input id="tl-auth-key" class="key-input" type="text" placeholder="Auth Key" autocomplete="off" spellcheck="false" autocapitalize="off">
+                </div>
+                <div class="key-input-wrap" style="margin-top: 0.5rem;">
+                  <input id="tl-auth-secret" class="key-input" type="password" placeholder="Auth Secret" autocomplete="off" spellcheck="false" autocapitalize="off">
+                  <button id="tl-reveal" class="reveal-btn" type="button">Show</button>
+                </div>
+                <div class="key-actions">
+                  <button id="tl-save-key" class="btn primary">Save</button>
+                  <div id="tl-key-error" class="err-inline hidden"></div>
+                </div>
+              </div>
+              <div id="tl-key-saved-mode" class="hidden">
+                <div class="key-saved-line">
+                  <span class="check">✓</span>
+                  <span class="key-preview" id="tl-key-preview"></span>
+                  <button id="tl-clear-key" class="reveal-btn" type="button">Change</button>
+                </div>
+              </div>
+              <div class="key-help">
+                Saved in this browser only and used to sign your video jobs. You bring your own Transloadit account, so you control the bill.
+              </div>
+            </div>
+          </div>
+
+          <div class="key-actions">
+            <button id="burnin-start" class="btn primary">Burn captions into video</button>
+            <div id="burnin-error" class="err-inline hidden"></div>
+          </div>
+          <div id="burnin-progress" class="hidden" style="margin-top: 0.8rem;">
+            <div class="ai-status-row"><span id="burnin-status-text" class="ai-status-text"></span></div>
+            <div class="ai-status-bar"><div id="burnin-status-fill" class="ai-status-fill" style="width:0%"></div></div>
+          </div>
+          <div id="burnin-result" class="hidden" style="margin-top: 0.8rem;">
+            <a id="burnin-download" class="btn primary" href="#" target="_blank" rel="noopener" download>Download captioned video ↓</a>
           </div>
         </div>
       </div>
@@ -3435,6 +3459,16 @@
       } else {
         teardownSyncPlayer();
       }
+
+      // Burn-in card: only for completed VIDEO transcripts that have timestamps
+      // and the original File in memory (needed for the client-side upload).
+      const canBurn = showTx && isVideoSource() && hasTimestamps() && (state.file instanceof File);
+      $('burnin-block').classList.toggle('hidden', !canBurn);
+      if (canBurn) {
+        const hasTrans = !!(state.aiResults && Array.isArray(state.aiResults.translationCues) && state.aiResults.translationCues.length);
+        $('burnin-src-translated-wrap').classList.toggle('hidden', !hasTrans);
+        if (!hasTrans && $('burnin-src-translated').checked) $('burnin-src-original').checked = true;
+      }
     }
 
     // Render Whisper segments as clickable lines (for synced playback)
@@ -4294,6 +4328,74 @@
     function resumeBurnJob() {
       try { return JSON.parse(localStorage.getItem(TL_JOB_STORAGE) || 'null'); } catch { return null; }
     }
+
+    // ---- Phase D: burn-in card controller ----
+    (function wireBurnIn() {
+      const startBtn = $('burnin-start');
+      if (!startBtn) return;
+      let running = false;
+
+      const showError = (msg) => { const el = $('burnin-error'); el.textContent = msg; el.classList.remove('hidden'); };
+      const setProgress = (text, pct) => {
+        $('burnin-progress').classList.remove('hidden');
+        $('burnin-status-text').textContent = text;
+        $('burnin-status-fill').style.width = (pct == null ? 0 : Math.max(0, Math.min(100, pct))) + '%';
+      };
+
+      startBtn.addEventListener('click', async () => {
+        if (running) return;
+        $('burnin-error').classList.add('hidden');
+        $('burnin-result').classList.add('hidden');
+
+        if (!state.transloaditKey || !state.transloaditSecret) {
+          showError('Enter and save your Transloadit credentials above first.');
+          return;
+        }
+        if (!(state.file instanceof File)) {
+          showError('The original video isn\'t in the browser for this item — re-add the video file to burn captions.');
+          return;
+        }
+        const useTranslated = $('burnin-src-translated').checked;
+        const cues = useTranslated
+          ? (state.aiResults && state.aiResults.translationCues)
+          : timedCues(state);
+        if (!Array.isArray(cues) || !cues.length) {
+          showError('No captions available to burn in.');
+          return;
+        }
+        const assText = cuesToASS(cues);
+
+        running = true; startBtn.disabled = true;
+        setProgress('Uploading video…', null);
+        try {
+          const statusUrl = await createBurnJob({
+            videoFile: state.file,
+            assText,
+            onProgress: ({ phase, loaded, total }) => {
+              if (phase === 'upload' && total) {
+                const p = loaded / total * 100;
+                setProgress('Uploading video… ' + Math.round(p) + '%', p);
+              }
+            },
+          });
+          setProgress('Burning captions into video…', null);
+          const url = await pollBurnJob(statusUrl, ({ progress }) => {
+            setProgress('Burning captions into video…' + (progress != null ? ' ' + progress + '%' : ''), progress);
+          });
+          setProgress('Done', 100);
+          const dl = $('burnin-download');
+          dl.href = url;
+          const base = (state.file.name || 'video').replace(/\.[^.]+$/, '');
+          dl.setAttribute('download', base + '-captioned.mp4');
+          $('burnin-result').classList.remove('hidden');
+        } catch (e) {
+          $('burnin-progress').classList.add('hidden');
+          showError(e.message || 'Burn-in failed.');
+        } finally {
+          running = false; startBtn.disabled = false;
+        }
+      });
+    })();
 
     $('history-clear').addEventListener('click', () => {
       if (confirm('Clear all saved transcripts? This cannot be undone.')) {
