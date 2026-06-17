@@ -922,7 +922,7 @@ const POST_PROCESS_MODELS = ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1'];
 
 // Core summary / action-items / translation logic. Returns a result object.
 // Throws Error on failure. Shared by the REST route and the MCP tool.
-async function runPostProcess(apiKey, { transcript, tasks, targetLanguage, model }) {
+async function runPostProcess(apiKey, { transcript, tasks, targetLanguage, model, cues }) {
   const text = (transcript || '').toString().trim().slice(0, 400000);
   tasks = Array.isArray(tasks) ? tasks : [];
   targetLanguage = (targetLanguage || '').toString().trim().slice(0, 40);
@@ -982,18 +982,64 @@ async function runPostProcess(apiKey, { transcript, tasks, targetLanguage, model
 
   if (tasks.includes('translate')) {
     const lang = targetLanguage || 'English';
-    const completion = await client.chat.completions.create({
-      model,
-      messages: [
-        { role: 'system', content: `You are a translator. Translate the user's transcript into ${lang}. Preserve speaker labels and line breaks. Output only the translation, no preamble.` },
-        { role: 'user', content: text },
-      ],
-      max_tokens: 8000,
-      temperature: 0,
-      seed: 1234,
-    });
-    result.translation = (completion.choices[0].message.content || '').trim();
-    result.translationLanguage = lang;
+
+    // Cue-aligned translation: when the client sends per-cue texts (one string
+    // per transcript segment/utterance), translate them line-by-line so each
+    // translated line keeps its original timestamp. This is what makes a
+    // *translated* caption file (.srt/.vtt) possible. We keep all cues in one
+    // request so the model still sees full context, and demand a same-length
+    // JSON array back. If cues are absent — or the model breaks alignment — we
+    // fall back to translating the whole transcript as one blob (no captions).
+    const cueArr = Array.isArray(cues)
+      ? cues.map(c => (c == null ? '' : c.toString()))
+      : null;
+    const cueChars = cueArr ? cueArr.reduce((n, s) => n + s.length, 0) : 0;
+    let aligned = false;
+
+    if (cueArr && cueArr.length && cueArr.length <= 500 && cueChars <= 40000) {
+      try {
+        const completion = await client.chat.completions.create({
+          model,
+          messages: [
+            { role: 'system', content:
+              `You are a subtitle translator. The user sends a JSON object {"cues":[...]}, an ordered array of transcript lines. ` +
+              `Translate every line into ${lang} and return a JSON object {"translations":[...]} whose array has EXACTLY the same number of items, in the same order, ` +
+              `each the ${lang} translation of the line at the same index. Use the surrounding lines for context, but do NOT merge, split, reorder, add, or drop items. ` +
+              `If a line has no translatable content, return it unchanged. Keep speaker names and proper nouns. Output only the JSON object.` },
+            { role: 'user', content: JSON.stringify({ cues: cueArr }) },
+          ],
+          response_format: { type: 'json_object' },
+          max_tokens: 16000,
+          temperature: 0,
+          seed: 1234,
+        });
+        let parsed = {};
+        try { parsed = JSON.parse(completion.choices[0].message.content || '{}'); } catch {}
+        const arr = Array.isArray(parsed.translations) ? parsed.translations : null;
+        if (arr && arr.length === cueArr.length) {
+          result.translationCues = arr.map(s => (s == null ? '' : s.toString()));
+          result.translation = result.translationCues.join('\n');
+          result.translationLanguage = lang;
+          aligned = true;
+        }
+      } catch { /* fall through to whole-transcript translation */ }
+    }
+
+    if (!aligned) {
+      const completion = await client.chat.completions.create({
+        model,
+        messages: [
+          { role: 'system', content: `You are a translator. Translate the user's transcript into ${lang}. Preserve speaker labels and line breaks. Output only the translation, no preamble.` },
+          { role: 'user', content: text },
+        ],
+        max_tokens: 8000,
+        temperature: 0,
+        seed: 1234,
+      });
+      result.translation = (completion.choices[0].message.content || '').trim();
+      result.translationLanguage = lang;
+      result.translationCues = null;
+    }
   }
 
   return result;
@@ -1019,6 +1065,7 @@ app.post('/api/post-process', postProcessLimiter, express.json({ limit: '4mb' })
       tasks: req.body.tasks,
       targetLanguage: req.body.targetLanguage,
       model: req.body.model,
+      cues: req.body.cues,
     });
     res.json(result);
   } catch (e) {

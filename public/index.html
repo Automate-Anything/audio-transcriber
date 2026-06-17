@@ -2270,6 +2270,8 @@
                   <button class="export-item" data-fmt="txt-ts" role="menuitem">Text with timestamps</button>
                   <button class="export-item" data-fmt="srt" role="menuitem">Subtitles (.srt)</button>
                   <button class="export-item" data-fmt="vtt" role="menuitem">Web captions (.vtt)</button>
+                  <button class="export-item hidden" data-fmt="srt-translated" role="menuitem">Translated subtitles (.srt)</button>
+                  <button class="export-item hidden" data-fmt="vtt-translated" role="menuitem">Translated captions (.vtt)</button>
                   <div id="export-all-group" class="export-all-group hidden">
                     <div class="export-group-label" id="export-all-label">Export all</div>
                     <button class="export-item" data-scope="all" data-fmt="txt" role="menuitem">All — plain text (.txt)</button>
@@ -2336,6 +2338,8 @@
               <span class="mono-sm" id="ai-translation-label">Translation</span>
               <div class="ai-block-actions">
                 <button id="ai-translation-download" class="ai-copy" type="button">Download .txt</button>
+                <button id="ai-translation-srt" class="ai-copy hidden" type="button" title="Download translated subtitles">.srt</button>
+                <button id="ai-translation-vtt" class="ai-copy hidden" type="button" title="Download translated web captions">.vtt</button>
                 <button class="ai-copy" data-target="ai-translation-text" type="button">Copy</button>
               </div>
             </div>
@@ -3594,23 +3598,42 @@
       return `${p2(h)}:${p2(m)}:${p2(s)}${sep}${String(ms).padStart(3, '0')}`;
     }
 
-    function buildSRT(src = state) {
-      const cues = timedCues(src);
-      if (!cues.length) return '';
+    // Build SRT/VTT from an explicit array of cues ({start, end, text, speaker}).
+    // Split out from the state lookup so the same builders serve both the
+    // original transcript (via timedCues) and a translated cue set.
+    function cuesToSRT(cues) {
+      if (!Array.isArray(cues) || !cues.length) return '';
       return cues.map((c, i) => {
         const line = c.speaker ? `${c.speaker}: ${c.text}` : c.text;
         return `${i + 1}\n${fmtStamp(c.start, ',')} --> ${fmtStamp(c.end, ',')}\n${line}`;
       }).join('\n\n') + '\n';
     }
 
-    function buildVTT(src = state) {
-      const cues = timedCues(src);
-      if (!cues.length) return '';
+    function cuesToVTT(cues) {
+      if (!Array.isArray(cues) || !cues.length) return '';
       const body = cues.map((c) => {
         const line = c.speaker ? `<v ${c.speaker}>${c.text}` : c.text;
         return `${fmtStamp(c.start, '.')} --> ${fmtStamp(c.end, '.')}\n${line}`;
       }).join('\n\n');
       return `WEBVTT\n\n${body}\n`;
+    }
+
+    function buildSRT(src = state) { return cuesToSRT(timedCues(src)); }
+    function buildVTT(src = state) { return cuesToVTT(timedCues(src)); }
+
+    // Reassemble translated cues into a readable block for the on-screen
+    // translation panel: speaker + timestamp headers for multi-speaker (like
+    // diarizedToText), or a flowed paragraph for single-speaker segments.
+    function translationReadingText(cues) {
+      if (!Array.isArray(cues) || !cues.length) return '';
+      const multi = cues.some(c => c.speaker);
+      if (multi) {
+        return cues.map(c => {
+          const who = c.speaker ? `${c.speaker} · ` : '';
+          return `${who}${fmtTimeMs((c.start || 0) * 1000)}\n${c.text}`;
+        }).join('\n\n');
+      }
+      return cues.map(c => (c.text || '').trim()).filter(Boolean).join(' ');
     }
 
     // Plain text with leading [HH:MM:SS] timestamps per cue/turn
@@ -3846,6 +3869,13 @@
         ? diarizedToText() : state.transcript;
       if (!transcript.trim()) return;
 
+      // Per-cue source texts (one per segment/utterance, each with a timestamp).
+      // Sent alongside the transcript so the server can translate cue-by-cue —
+      // that's what lets us offer a *translated* caption file (.srt/.vtt).
+      // Empty when there are no timestamps; translation then falls back to the
+      // whole-transcript blob and no caption is offered.
+      const srcCues = timedCues(state);
+
       // Estimate: summary/actions are quick; translation scales with length
       // (it re-emits the whole transcript). Rough but gives a sensible ETA.
       const words = transcript.split(/\s+/).filter(Boolean).length;
@@ -3871,6 +3901,7 @@
             tasks,
             targetLanguage: $('opt-translate-lang').value,
             model: $('opt-model').value,
+            cues: (tasks.includes('translate') && srcCues.length) ? srcCues.map(c => c.text) : undefined,
           }),
         });
         const data = await resp.json();
@@ -3881,12 +3912,25 @@
         $('ai-status-fill').style.width = '100%';
         setTimeout(() => $('ai-results-status').classList.add('hidden'), 350);
 
+        // Zip the server's per-cue translations back onto the original cue
+        // timestamps + speaker labels. Only when counts line up exactly — a
+        // mismatch (or no cues returned) means captions aren't available and we
+        // fall back to the plain translated text.
+        const translationCues = (Array.isArray(data.translationCues)
+            && srcCues.length && data.translationCues.length === srcCues.length)
+          ? srcCues.map((c, i) => ({
+              start: c.start, end: c.end, speaker: c.speaker,
+              text: String(data.translationCues[i] == null ? '' : data.translationCues[i]),
+            }))
+          : null;
+
         // Store results in state so speaker renames can update them later
         state.aiResults = {
           summary: data.summary != null ? data.summary : null,
           actionItems: Array.isArray(data.actionItems) ? data.actionItems : null,
           translation: data.translation != null ? data.translation : null,
           translationLanguage: data.translationLanguage || '',
+          translationCues,
         };
         renderAiResults();
       } catch (e) {
@@ -3912,10 +3956,15 @@
           r.actionItems.forEach(a => { const li = document.createElement('li'); li.textContent = a; ul.appendChild(li); });
         }
       }
-      if (r.translation != null) {
+      if (r.translation != null || (Array.isArray(r.translationCues) && r.translationCues.length)) {
         $('ai-translation-block').classList.remove('hidden');
         $('ai-translation-label').textContent = 'Translation' + (r.translationLanguage ? ` (${r.translationLanguage})` : '');
-        $('ai-translation-text').textContent = r.translation;
+        const hasCaps = Array.isArray(r.translationCues) && r.translationCues.length > 0;
+        $('ai-translation-text').textContent = hasCaps ? translationReadingText(r.translationCues) : r.translation;
+        // Caption (.srt/.vtt) downloads need per-cue timestamps — only show them
+        // when the translation came back cue-aligned.
+        $('ai-translation-srt').classList.toggle('hidden', !hasCaps);
+        $('ai-translation-vtt').classList.toggle('hidden', !hasCaps);
       }
     }
 
@@ -3929,6 +3978,11 @@
       if (typeof r.summary === 'string') r.summary = r.summary.replace(rx, newLabel);
       if (Array.isArray(r.actionItems)) r.actionItems = r.actionItems.map(a => a.replace(rx, newLabel));
       if (typeof r.translation === 'string') r.translation = r.translation.replace(rx, newLabel);
+      if (Array.isArray(r.translationCues)) r.translationCues = r.translationCues.map(c => ({
+        ...c,
+        speaker: typeof c.speaker === 'string' ? c.speaker.replace(rx, newLabel) : c.speaker,
+        text: typeof c.text === 'string' ? c.text.replace(rx, newLabel) : c.text,
+      }));
       renderAiResults();
     }
 
@@ -3958,6 +4012,21 @@
       document.body.appendChild(a); a.click(); document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     });
+
+    // Download the translated transcript as a caption file (.srt/.vtt), built
+    // from the cue-aligned translation. Shared by the translation card buttons
+    // and the Export menu so the two paths can't drift.
+    function downloadTranslatedCaption(kind) {
+      const cues = state.aiResults && state.aiResults.translationCues;
+      if (!Array.isArray(cues) || !cues.length) return;
+      const lang = ((state.aiResults.translationLanguage || 'translation')
+        .toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')) || 'translation';
+      const base = (state.file?.name || 'transcript').replace(/\.[^.]+$/, '');
+      if (kind === 'vtt') downloadText(cuesToVTT(cues), 'vtt', 'text/vtt', `${base}-${lang}`);
+      else downloadText(cuesToSRT(cues), 'srt', 'application/x-subrip', `${base}-${lang}`);
+    }
+    $('ai-translation-srt').addEventListener('click', () => downloadTranslatedCaption('srt'));
+    $('ai-translation-vtt').addEventListener('click', () => downloadTranslatedCaption('vtt'));
 
     $('history-clear').addEventListener('click', () => {
       if (confirm('Clear all saved transcripts? This cannot be undone.')) {
@@ -5051,6 +5120,14 @@
         el.disabled = !ts;
         el.title = ts ? '' : 'No timestamps available for this transcript';
       });
+      // Translated subtitles/captions: shown only when a cue-aligned translation
+      // exists. Not gated on video — someone who translated specifically to get
+      // a caption file should be able to download it for audio too.
+      const transCues = state.aiResults && state.aiResults.translationCues;
+      const hasTransCaps = Array.isArray(transCues) && transCues.length > 0;
+      menu.querySelectorAll('.export-item[data-fmt="srt-translated"],.export-item[data-fmt="vtt-translated"]').forEach(el => {
+        el.classList.toggle('hidden', !hasTransCaps);
+      });
 
       // --- Export-all group (whole batch) ---
       const doneItems = state.batch.filter(i => i.stage === 'done' && (i.transcript || (Array.isArray(i.utterances) && i.utterances.length)));
@@ -5080,6 +5157,11 @@
       const item = e.target.closest('.export-item');
       if (!item || item.disabled) return;
       const fmt = item.dataset.fmt;
+      if (fmt === 'srt-translated' || fmt === 'vtt-translated') {
+        downloadTranslatedCaption(fmt === 'vtt-translated' ? 'vtt' : 'srt');
+        toggleExportMenu(false);
+        return;
+      }
       if (item.dataset.scope === 'all') {
         exportAllBatch(fmt);
       } else {
